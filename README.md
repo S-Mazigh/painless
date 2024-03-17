@@ -51,7 +51,7 @@ filename=./inputs_example/f/f2000.cnf #path to a cnf file
 ``` sh
 -str "one thread in charge of strengthening learnt clauses per sharing group"
 
--dup "remove/promote duplicate clauses, not available in StrengtheningSharing"
+-dup "remove/promote duplicate clauses in local sharing strategy, not available in StrengtheningSharing"
 
 -dist "enable distributed mode"
 
