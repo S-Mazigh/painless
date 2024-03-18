@@ -24,7 +24,7 @@
 #include "utils/BloomFilter.h"
 #include "painless.h"
 
-HordeStrSharing::HordeStrSharing(int id, std::vector<SharingEntity *> &producers, std::vector<SharingEntity *> &consumers, SharingEntity *reducer_) : LocalSharingStrategy(id, producers, consumers), reducer(reducer_)
+HordeStrSharing::HordeStrSharing(int id, std::vector<SharingEntity *> &producers, std::vector<SharingEntity *> &consumers, SolverInterface *reducer_) : LocalSharingStrategy(id, producers, consumers), reducer(reducer_)
 {
     this->literalPerRound = Parameters::getIntParam("shr-lit", 1500);
     this->initPhase = true;
@@ -39,7 +39,7 @@ HordeStrSharing::HordeStrSharing(int id, std::vector<SharingEntity *> &producers
     }
 }
 
-HordeStrSharing::HordeStrSharing(int id, std::vector<SharingEntity *> &&producers, std::vector<SharingEntity *> &&consumers, SharingEntity *reducer_) : LocalSharingStrategy(id, producers, consumers), reducer(reducer_)
+HordeStrSharing::HordeStrSharing(int id, std::vector<SharingEntity *> &&producers, std::vector<SharingEntity *> &&consumers, SolverInterface *reducer_) : LocalSharingStrategy(id, producers, consumers), reducer(reducer_)
 {
     this->literalPerRound = Parameters::getIntParam("shr-lit", 1500);
     this->initPhase = true;

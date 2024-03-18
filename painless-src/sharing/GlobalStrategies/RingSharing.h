@@ -83,5 +83,4 @@ protected:
     /// @brief left nighbor mpi_world index
     int right_neighbor;
 };
-#else
 #endif

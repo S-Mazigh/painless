@@ -456,9 +456,9 @@ sharersInit:
    {
       pthread_create(&ptr[i], NULL, readWorker, solvers[i]);
    }
-   for (int i = nSolvers; i < nSolvers + nReducers; i++)
+   for (int i = 0; i < nReducers; i++)
    {
-      pthread_create(&ptr[i], NULL, readWorker, reducers[i]);
+      pthread_create(&ptr[i+nSolvers], NULL, readWorker, reducers[i]);
    }
 
    // join readers
@@ -484,12 +484,12 @@ sharersInit:
    pthread_mutex_lock(&mutexGlobalEnd); // to make sure that the broadcast is done when main has done its wait
    // Init working
    working = new Portfolio();
-   for (size_t i = 0; i < nSolvers; i++)
+   for (int i = 0; i < nSolvers; i++)
    {
       working->addSlave(new SequentialWorker(solvers[i]));
    }
 
-   for (size_t i = 0; i < nReducers; i++)
+   for (int i = 0; i < nReducers; i++)
    {
       working->addSlave(new SequentialWorker(reducers[i]));
    }
@@ -571,7 +571,7 @@ sharersInit:
    // SolverFactory::printStats(solvers);
 
    // Delete working strategy
-   delete working;
+   // delete working;
 
    // Delete shared clauses
    ClauseManager::joinClauseManager();

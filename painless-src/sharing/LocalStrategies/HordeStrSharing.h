@@ -32,8 +32,8 @@ class HordeStrSharing : public LocalSharingStrategy
 {
 public:
     /// Constructors
-    HordeStrSharing(int id, std::vector<SharingEntity *> &producers, std::vector<SharingEntity *> &consumers, SharingEntity *reducer);
-    HordeStrSharing(int id, std::vector<SharingEntity *> &&producers, std::vector<SharingEntity *> &&consumers, SharingEntity *reducer);
+    HordeStrSharing(int id, std::vector<SharingEntity *> &producers, std::vector<SharingEntity *> &consumers, SolverInterface *reducer);
+    HordeStrSharing(int id, std::vector<SharingEntity *> &&producers, std::vector<SharingEntity *> &&consumers, SolverInterface *reducer);
 
     /// Destructor.
     ~HordeStrSharing();
@@ -70,7 +70,7 @@ protected:
     /// @brief Round Number
     int round;
 
-    SharingEntity *reducer;
+    SolverInterface *reducer;
 
     /// Databse used to store the clauses.
     unordered_map<int, ClauseDatabaseVector *> databases;
