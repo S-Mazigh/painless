@@ -20,7 +20,7 @@ void Parameters::init(int argc, char **argv)
          // Check if the file exists
          if (!std::filesystem::exists(filename))
          {
-            LOGERROR("Error: File '%s' not found.",filename);
+            LOGERROR("Error: File '%s' not found",filename);
             exit(PERR_ARGS_ERROR); // Or handle the error appropriately
          }
 
