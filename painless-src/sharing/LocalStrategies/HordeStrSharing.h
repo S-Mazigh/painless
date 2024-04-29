@@ -32,18 +32,22 @@ class HordeStrSharing : public LocalSharingStrategy
 {
 public:
     /// Constructors
-    HordeStrSharing(int id, std::vector<SharingEntity *> &producers, std::vector<SharingEntity *> &consumers, SolverInterface *reducer);
-    HordeStrSharing(int id, std::vector<SharingEntity *> &&producers, std::vector<SharingEntity *> &&consumers, SolverInterface *reducer);
+    HordeStrSharing(std::vector<std::shared_ptr<SharingEntity>> &producers, std::vector<std::shared_ptr<SharingEntity>> &consumers, std::shared_ptr<SolverCdclInterface> reducer);
+    HordeStrSharing(std::vector<std::shared_ptr<SharingEntity>> &&producers, std::vector<std::shared_ptr<SharingEntity>> &&consumers, std::shared_ptr<SolverCdclInterface> reducer);
 
     /// Destructor.
     ~HordeStrSharing();
+
+    ulong getSleepingTime() override {
+      return this->sleepTime;
+   }
 
     /// This method shared clauses from the producers to the consumers.
     bool doSharing() override;
 
     /// @brief  Each producer fill its database, then a selection is done which is sent to all the consumers.
     /// @param solver the solver to interact with (visit)
-    void visit(SolverInterface *solver) override;
+    void visit(SolverCdclInterface *solver) override;
 
     /// @brief The default behavior of any sharingEntity if this strategy
     /// @param sh_entity the sharing entityity to interact with (visit)
@@ -70,11 +74,13 @@ protected:
     /// @brief Round Number
     int round;
 
-    SolverInterface *reducer;
+    std::shared_ptr<SolverCdclInterface> reducer; // TODO: new interface for strengthners and simplifiers, make it a unique ptr ?
 
     /// Databse used to store the clauses.
-    unordered_map<int, ClauseDatabaseVector *> databases;
+    std::unordered_map<int, ClauseDatabaseVector *> databases;
 
     /// Used to manipulate clauses.
-    std::vector<ClauseExchange *> tmp;
+    std::vector<std::shared_ptr<ClauseExchange>> tmp;
+
+    ulong sleepTime;
 };

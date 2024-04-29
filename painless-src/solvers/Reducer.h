@@ -20,11 +20,11 @@
 #pragma once
 
 #include "clauses/ClauseBuffer.h"
-#include "../solvers/SolverInterface.hpp"
+#include "solvers/SolverCdclInterface.hpp"
 #include "utils/Threading.h"
 #include "utils/BloomFilter.h"
 
-using namespace std;
+
 
 #define STATS_LBD_MAX 20
 #define STATS_SZ_MAX 100
@@ -38,12 +38,11 @@ namespace MapleCOMSPS
    class vec;
 }
 
-/// Instance of a MapleCOMSPS solver
-class Reducer : public SolverInterface
+/// \ingroup solving
+/// Reducer Class used by HordeStrSharing strategy to strengthen clauses.
+class Reducer : public SolverCdclInterface
 {
 public:
-   /// Load formula from a given dimacs file, return false if failed.
-   bool loadFormula(const char *filename);
 
    /// Get the number of variables of the current resolution.
    int getVariablesCount();
@@ -52,7 +51,7 @@ public:
    int getDivisionVariable();
 
    /// Set initial phase for a given variable.
-   void setPhase(const int var, const bool phase);
+   void setPhase(const unsigned var, const bool phase);
 
    /// Bump activity of a given variable.
    void bumpVariableActivity(const int var, const int times);
@@ -64,27 +63,28 @@ public:
    void unsetSolverInterrupt();
 
    /// Solve the formula with a given cube.
-   // SatResult solve_(const vector<int> &cube);
+   SatResult solve(const std::vector<int> &cube);
 
-   SatResult solve(const vector<int> &cube);
+   /// Load formula from a given dimacs file, return false if failed.
+   void loadFormula(const char *filename) override; 
 
    /// Add a permanent clause to the formula.
-   void addClause(ClauseExchange *clause);
+   void addClause(std::shared_ptr<ClauseExchange> clause);
 
    /// Add a list of permanent clauses to the formula.
-   void addClauses(const vector<ClauseExchange *> &clauses);
+   void addClauses(const std::vector<std::shared_ptr<ClauseExchange> > &clauses);
 
    /// Add a list of initial clauses to the formula.
-   void addInitialClauses(const vector<ClauseExchange *> &clauses);
+   void addInitialClauses(const std::vector<simpleClause> &clauses, unsigned nbVars) override;
 
    /// Add a learned clause to the formula.
-   bool importClause(ClauseExchange *clause);
+   bool importClause(std::shared_ptr<ClauseExchange> clause);
 
    /// Add a list of learned clauses to the formula.
-   void importClauses(const vector<ClauseExchange *> &clauses);
+   void importClauses(const std::vector<std::shared_ptr<ClauseExchange> > &clauses);
 
    /// Get a list of learned clauses.
-   void exportClauses(vector<ClauseExchange *> &clauses);
+   void exportClauses(std::vector<std::shared_ptr<ClauseExchange> > &clauses);
 
    /// Request the solver to produce more clauses.
    void increaseClauseProduction();
@@ -93,40 +93,36 @@ public:
    void decreaseClauseProduction();
 
    /// Get solver statistics.
-   SolvingStatistics getStatistics();
+   void printStatistics();
 
    /// Return the model in case of SAT result.
-   vector<int> getModel();
+   std::vector<int> getModel();
 
    /// Return the final analysis in case of UNSAT.
-   vector<int> getFinalAnalysis();
+   std::vector<int> getFinalAnalysis();
 
    /// Native diversification.
-   void diversify();
+   void diversify(std::mt19937 &rng_engine, std::uniform_int_distribution<int> &uniform_dist);
 
-   bool strengthened(ClauseExchange *cls, ClauseExchange **outCls);
+   bool strengthened(std::shared_ptr<ClauseExchange> cls, std::shared_ptr<ClauseExchange> &outCls);
 
    void printStatsStrengthening();
 
-   vector<int> getSatAssumptions();
+   std::vector<int> getSatAssumptions();
 
    // bool testStrengthening()
 
    void initshuffle(int id){};
 
-   void addOriginClauses(simplify *S);
-
-   void setBumpVar(int v) {}
-
    /// Constructor.
-   Reducer(int id, SolverInterface *solver);
+   Reducer(int id, SolverCdclType type);
 
    /// Destructor.
    virtual ~Reducer();
 
 protected:
    /// Pointer to a MapleCOMSPS solver.
-   SolverInterface *solver;
+   std::unique_ptr<SolverCdclInterface>solver;
 
    /// Buffer used to import clauses (units included).
    ClauseBuffer clausesToImport;
@@ -135,6 +131,8 @@ protected:
    ClauseBuffer clausesToExport;
 
    // BloomFilter filter;
+
+   std::atomic<bool> interrupted;
 
    // unsigned long received_lbd[STATS_LBD_MAX];
    // unsigned long reduced_lbd[STATS_LBD_MAX];

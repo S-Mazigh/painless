@@ -37,34 +37,34 @@ public:
 	~ClauseDatabaseVector();
 
 	/// Add a shared clause to the database.
-	bool addClause(ClauseExchange *clause) override;
+	bool addClause(std::shared_ptr<ClauseExchange> clause) override;
 
 	/// @brief Old definition with redundant information on selectCount == selectedCls.size()
 	/// @return the number of used literals.
-	int giveSelection(vector<ClauseExchange *> &selectedCls, unsigned totalSize,
+	int giveSelection(std::vector<std::shared_ptr<ClauseExchange> > &selectedCls, unsigned totalSize,
 					  int *selectCount);
 
 	/// Fill the given buffer with shared clauses.
 	/// @param totalSize Represents the limit size in literals.
 	/// @return the number of selected clauses in literals.
-	int giveSelection(vector<ClauseExchange *> &selectedCls, unsigned totalSize);
+	int giveSelection(std::vector<std::shared_ptr<ClauseExchange> > &selectedCls, unsigned totalSize);
 
 	/// @brief Fill a vector with all its clauses
 	/// @param v_cls the vector to fill
-	void getClauses(vector<ClauseExchange *> &v_cls) override;
+	void getClauses(std::vector<std::shared_ptr<ClauseExchange> > &v_cls) override;
 
 	/// @brief To select the best clause in the database
 	/// @param cls a double pointer, since i seek a pointer value
 	/// @return true if found at least on clause to select, otherwise false (database is empty)
-	bool giveOneClause(ClauseExchange **cls) override;
+	bool giveOneClause(std::shared_ptr<ClauseExchange> &cls) override;
 
 	/// @brief Get the number of clauses present in the database per size
 	/// @param nbClsPerSize a vector that will store the numbers
 	void getSizes(std::vector<int> &nbClsPerSize) override;
 
 	/// @brief get the actual size of the database
-	/// @return the actual size as an uint
-	uint getSize() override;
+	/// @return the actual size as an unsigned
+	unsigned getSize() override;
 
 	/// @brief Deletes all the clauses that have a size equal or greater than `size`
 	/// @param size The size from which clauses will be deleted, for example to delete all the clauses give size = 1 (delete from the clauses of size 1)
@@ -72,5 +72,5 @@ public:
 
 protected:
 	/// Vector of vector of shared clauses, one vector per size.
-	std::vector<std::vector<ClauseExchange *>> clauses;
+	std::vector<std::vector<std::shared_ptr<ClauseExchange>>> clauses;
 };

@@ -23,6 +23,9 @@
 #include "utils/Threading.h"
 
 #include <vector>
+#include <memory>
+#include <sstream>
+
 
 /// Clause database interface for all sharing strategies (local & global)
 class ClauseDatabase
@@ -39,32 +42,32 @@ public:
 	virtual ~ClauseDatabase();
 
 	/// Add a shared clause to the database.
-	virtual bool addClause(ClauseExchange *clause) = 0;
+	virtual bool addClause(std::shared_ptr<ClauseExchange> clause) = 0;
 
 	/// Fill the given buffer with shared clauses.
 	/// @param totalSize Represents the total size in literals
-	/// @return the number of selected clauses in literals.
-	virtual int giveSelection(std::vector<ClauseExchange *> &selectedCls, unsigned totalSize) = 0;
+	/// @return the number of selected clauses in literal count.
+	virtual int giveSelection(std::vector<std::shared_ptr<ClauseExchange>> &selectedCls, unsigned totalSize) = 0;
 
 	/// @brief Fill a vector with all its clauses
 	/// @param v_cls the vector to fill
-	virtual void getClauses(std::vector<ClauseExchange *> &v_cls) = 0;
+	virtual void getClauses(std::vector<std::shared_ptr<ClauseExchange>> &v_cls) = 0;
 
 	/// @brief To select the best clause in the database
 	/// @param cls a double pointer, since i seek a pointer value
 	/// @return true if found at least on clause to select, otherwise false (database is empty)
-	virtual bool giveOneClause(ClauseExchange **cls) = 0;
+	virtual bool giveOneClause(std::shared_ptr<ClauseExchange> &cls) = 0;
 
 	/// @brief Get the number of clauses present in the database per size
 	/// @param nbClsPerSize a vector that will store the numbers
 	virtual void getSizes(std::vector<int> &nbClsPerSize) = 0;
 
 	/// @brief get the actual size of the database
-	/// @return the actual size as an uint
-	virtual uint getSize() = 0;
+	/// @return the actual size as an unsigned
+	virtual unsigned getSize() = 0;
 
 	/// @brief Prints the number of clauses seen per clause size.
-    void printTotalSizes();
+    void getTotalSizes(std::stringstream &strStream);
 
 	/// @brief Deletes all the clauses that have a size equal or greater than `size`
 	/// @param size The size from which clauses will be deleted, for example to delete all the clauses give size = 1 (delete from the clauses of size 1)

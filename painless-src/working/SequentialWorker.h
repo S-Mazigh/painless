@@ -25,7 +25,6 @@
 
 #include <vector>
 
-;
 
 // Main executed by worker threads
 static void *mainWorker(void *arg);
@@ -33,7 +32,7 @@ static void *mainWorker(void *arg);
 class SequentialWorker : public WorkingStrategy
 {
 public:
-   SequentialWorker(SolverInterface *solver_);
+   SequentialWorker(std::shared_ptr<SolverInterface> solver_);
 
    ~SequentialWorker();
 
@@ -48,13 +47,7 @@ public:
 
    void waitInterrupt();
 
-   int getDivisionVariable();
-
-   void setPhase(const int var, const bool phase);
-
-   void bumpVariableActivity(const int var, const int times);
-
-   SolverInterface *solver;
+   std::shared_ptr<SolverInterface> solver;
 
 protected:
    friend void *mainWorker(void *arg);
@@ -63,9 +56,9 @@ protected:
 
    std::vector<int> actualCube;
 
-   atomic<bool> force;
+   std::atomic<bool> force;
 
-   atomic<bool> waitJob;
+   std::atomic<bool> waitJob;
 
    Mutex waitInterruptLock;
 

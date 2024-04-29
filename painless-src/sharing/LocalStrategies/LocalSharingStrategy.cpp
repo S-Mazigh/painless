@@ -1,63 +1,75 @@
 #include "LocalSharingStrategy.h"
 #include "painless.h"
 
-LocalSharingStrategy::LocalSharingStrategy(int id, std::vector<SharingEntity *> &producers, std::vector<SharingEntity *> &consumers) : SharingStrategy(id)
+#include <algorithm>
+
+LocalSharingStrategy::LocalSharingStrategy(std::vector<std::shared_ptr<SharingEntity>> &producers, std::vector<std::shared_ptr<SharingEntity>> &consumers) : SharingStrategy()
 {
     this->producers = producers;
     this->consumers = consumers;
-    this->idSharer = id;
-
-    for (size_t i = 0; i < producers.size(); i++)
-    {
-        producers[i]->increase();
-    }
-
-    for (size_t i = 0; i < consumers.size(); i++)
-    {
-        consumers[i]->increase();
-    }
 }
 
-LocalSharingStrategy::LocalSharingStrategy(int id, std::vector<SharingEntity *> &&producers, std::vector<SharingEntity *> &&consumers) : SharingStrategy(id)
+LocalSharingStrategy::LocalSharingStrategy(std::vector<std::shared_ptr<SharingEntity>> &&producers, std::vector<std::shared_ptr<SharingEntity>> &&consumers) : SharingStrategy()
 {
     this->producers = producers;
     this->consumers = consumers;
-    this->idSharer = id;
-
-    for (size_t i = 0; i < producers.size(); i++)
-    {
-        producers[i]->increase();
-    }
-
-    for (size_t i = 0; i < consumers.size(); i++)
-    {
-        consumers[i]->increase();
-    }
 }
 
 void LocalSharingStrategy::printStats()
 {
-    cout << "\n=====\nc Local Sharer[" << mpi_rank << "-" << idSharer << "]:"
-         << "receivedCls " << stats.receivedClauses
-         << ",sharedCls " << stats.sharedClauses
-         << ",receivedDuplicas " << stats.receivedDuplicas
-         << ",promotionTiers2 " << stats.promotionTiers2
-         << ",promotionsCore " << stats.promotionCore
-         << ",alreadyTiers2 " << stats.alreadyTiers2
-         << ",alreadyCore " << stats.alreadyCore
-         << "\n=====\n"
-         << endl;
+    LOGSTAT("Local Strategy: receivedCls %d, sharedCls %d, receivedDuplicas %d, promotionTiers2 %d, promotionsCore %d, alreadyTiers2 %d, alreadyCore %d",
+        stats.receivedClauses, stats.sharedClauses, stats.receivedDuplicas, stats.promotionTiers2, stats.promotionCore, stats.alreadyTiers2, stats.alreadyCore);
 }
 
 LocalSharingStrategy::~LocalSharingStrategy()
 {
-    for (size_t i = 0; i < producers.size(); i++)
-    {
-        producers[i]->release();
-    }
+}
 
-    for (size_t i = 0; i < consumers.size(); i++)
+void LocalSharingStrategy::addProducer(std::shared_ptr<SharingEntity> sharingEntity)
+{
+
+    addLock.lock();
+    addProducers.push_back(sharingEntity);
+    addLock.unlock();
+    this->mustAddEntities = true;
+}
+
+void LocalSharingStrategy::addConsumer(std::shared_ptr<SharingEntity> sharingEntity)
+{
+    addLock.lock();
+    addConsumers.push_back(sharingEntity);
+    addLock.unlock();
+    this->mustAddEntities = true;
+}
+
+void LocalSharingStrategy::removeProducer(std::shared_ptr<SharingEntity> sharingEntity)
+{
+    removeLock.lock();
+    removeProducers.push_back(sharingEntity);
+    removeLock.unlock();
+    this->mustRemoveEntities = true;
+}
+
+void LocalSharingStrategy::removeConsumer(std::shared_ptr<SharingEntity> sharingEntity)
+{
+    removeLock.lock();
+    removeConsumers.push_back(sharingEntity);
+    removeLock.unlock();
+    this->mustRemoveEntities = true;
+}
+
+void LocalSharingStrategy::removeSharingEntities(std::vector<std::shared_ptr<SharingEntity>> &entitiesToRemove, std::vector<std::shared_ptr<SharingEntity>> &presentEntities)
+{
+    /* TODO optimize */
+    for (size_t i = 0; i < entitiesToRemove.size(); i++)
     {
-        consumers[i]->release();
+        presentEntities.erase(std::remove(presentEntities.begin(), presentEntities.end(), entitiesToRemove[i]), presentEntities.end());
     }
+    entitiesToRemove.clear();
+}
+
+void LocalSharingStrategy::addSharingEntities(std::vector<std::shared_ptr<SharingEntity>> &newEntities, std::vector<std::shared_ptr<SharingEntity>> &presentEntities)
+{
+    presentEntities.insert(presentEntities.end(), newEntities.begin(), newEntities.end());
+    newEntities.clear();
 }

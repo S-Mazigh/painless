@@ -23,24 +23,27 @@
 #include <fstream>
 #include <unordered_map>
 #include "clauses/ClauseBuffer.h"
-#include "../solvers/SolverInterface.hpp"
+#include "../solvers/SolverCdclInterface.hpp"
 #include "utils/Threading.h"
+#include "utils/ClauseUtils.h"
 
-// Some forward declatarations for KissatMABSolver
-struct kissat;
-struct cvec;
+#define KISSATMAB_
+
+
+// KissatMABSolver includes
+extern "C"
+{
+#include <kissat_mab/src/kissat.h>
+}
 
 /// Instance of a KissatMABSolver solver
-class KissatMABSolver : public SolverInterface
+class KissatMABSolver : public SolverCdclInterface
 {
 public:
-   void addOriginClauses(simplify *S);
-
    void setBumpVar(int v);
 
-   ofstream outputf;
    /// Load formula from a given dimacs file, return false if failed.
-   bool loadFormula(const char *filename);
+   void loadFormula(const char *filename);
 
    /// Get the number of variables of the current resolution.
    int getVariablesCount();
@@ -49,7 +52,7 @@ public:
    int getDivisionVariable();
 
    /// Set initial phase for a given variable.
-   void setPhase(const int var, const bool phase);
+   void setPhase(const unsigned var, const bool phase);
 
    /// Bump activity of a given variable.
    void bumpVariableActivity(const int var, const int times);
@@ -64,22 +67,22 @@ public:
    SatResult solve(const std::vector<int> &cube);
 
    /// Add a permanent clause to the formula.
-   void addClause(ClauseExchange *clause);
+   void addClause(std::shared_ptr<ClauseExchange> clause);
 
    /// Add a list of permanent clauses to the formula.
-   void addClauses(const std::vector<ClauseExchange *> &clauses);
+   void addClauses(const std::vector<std::shared_ptr<ClauseExchange>> &clauses);
 
    /// Add a list of initial clauses to the formula.
-   void addInitialClauses(const std::vector<ClauseExchange *> &clauses);
+   void addInitialClauses(const std::vector<simpleClause> &clauses, unsigned nbVars) override;
 
    /// Add a learned clause to the formula.
-   bool importClause(ClauseExchange *clause);
+   bool importClause(std::shared_ptr<ClauseExchange> clause);
 
    /// Add a list of learned clauses to the formula.
-   void importClauses(const std::vector<ClauseExchange *> &clauses);
+   void importClauses(const std::vector<std::shared_ptr<ClauseExchange>> &clauses);
 
    /// Get a list of learned clauses.
-   void exportClauses(std::vector<ClauseExchange *> &clauses);
+   void exportClauses(std::vector<std::shared_ptr<ClauseExchange>> &clauses);
 
    /// Request the solver to produce more clauses.
    void increaseClauseProduction();
@@ -87,22 +90,17 @@ public:
    /// Request the solver to produce less clauses.
    void decreaseClauseProduction();
 
-   void setParameter(parameter p);
-
    /// Get solver statistics.
-   SolvingStatistics getStatistics();
+   void printStatistics();
 
    /// Return the model in case of SAT result.
    std::vector<int> getModel();
 
    /// Native diversification.
-   void diversify();
+   void diversify(std::mt19937 &rng_engine, std::uniform_int_distribution<int> &uniform_dist) override;
 
    /// @brief Initializes the map @ref kissatOptions with the default configuration.
    void initkissatMABOptions();
-
-   /// Native diversification.
-   void initshuffle(int id);
 
    /// Constructor.
    KissatMABSolver(int id);
@@ -133,14 +131,13 @@ protected:
    /// Buffer used to add permanent clauses.
    ClauseBuffer clausesToAdd;
 
-   /// Size limit used to share clauses.
-   atomic<int> lbdLimit;
-
    /// Used to stop or continue the resolution.
-   atomic<bool> stopSolver;
+   std::atomic<bool> stopSolver;
 
-   /// Callback to export/import clauses.
-   friend int cbkKissatMABSolverImportUnit(void *);
-   friend int cbkKissatMABSolverImportClause(void *, unsigned int *, cvec *);
-   friend void cbkKissatMABSolverExportClause(void *, unsigned int, cvec *);
+   /// Callback to export/import clauses used by real kissat.
+   /* Decided to not use pointers to move because of c++ stl (cannot move an array into a vector, sharedPtr destruction) */
+   friend char KissatMabImportUnit(void *, kissat *);
+   /* With KissatMabImportClause(void *painless_interface, int *kclause, unsigned *size): need to not use sharedPtr*/
+   friend char KissatMabImportClause(void *, kissat *); 
+   friend char KissatMabExportClause(void *, kissat *);
 };

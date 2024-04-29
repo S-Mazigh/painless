@@ -1,23 +1,36 @@
 all:
 	##################################################
-	###               kissat_mab                   ###
+	###                    m4ri                    ###
 	##################################################
-	chmod a+x kissat_mab/configure #kissat_mab/scripts/*.sh
-	cd kissat_mab && ./configure --compact
-	+ $(MAKE) -C kissat_mab
+	cd libs/m4ri-20200125 && autoreconf --install && ./configure --enable-thread-safe
+	+ $(MAKE) -C libs/m4ri-20200125
+	
+	##################################################
+	###                 kissat_mab                 ###
+	##################################################
+	cd solvers/kissat_mab && bash ./configure --compact
+	+ $(MAKE) -C solvers/kissat_mab
 
 	##################################################
-	###               MapleCOMSPS                  ###
+	###               GASPIKISSAT                  ###
 	##################################################
-	if [ -d mapleCOMSPS/m4ri-20140914 ]; then : ; \
-	else cd mapleCOMSPS && tar zxvf m4ri-20140914.tar.gz && \
-	cd m4ri-20140914 && ./configure; fi
-	+ $(MAKE) -C mapleCOMSPS/m4ri-20140914
-	+ $(MAKE) -C mapleCOMSPS r
+	cd solvers/GASPIKISSAT && bash ./configure --compact --quiet
+	+ $(MAKE) -C solvers/GASPIKISSAT
+
+	##################################################
+	###                   yalsat                   ###
+	################################################## 
+	cd solvers/yalsat && bash ./configure.sh
+	+ $(MAKE) -C solvers/yalsat
+
+	##################################################
+	###                 MapleCOMSPS                ###
+	##################################################
+	+ $(MAKE) -C solvers/mapleCOMSPS r
 
 
 	##################################################
-	###                 PaInleSS                   ###
+	###                   PaInleSS                 ###
 	##################################################
 	+ $(MAKE) -C painless-src
 	mv painless-src/painless painless
@@ -26,9 +39,10 @@ clean:
 	##################################################
 	###                   Clean                    ###
 	##################################################
+	+ $(MAKE) clean -C solvers/kissat_mab -f makefile.in
+	rm -rf solvers/kissat_mab/build
+	+ $(MAKE) clean -C solvers/GASPIKISSAT -f makefile.in
+	rm -rf solvers/GASPIKISSAT/build
+	+ $(MAKE) -C solvers/mapleCOMSPS clean
 	+ $(MAKE) clean -C painless-src
-	+ $(MAKE) clean -C kissat_mab -f makefile.in
-	rm -rf kissat_mab/build
-	rm -rf mapleCOMSPS/m4ri-20140914
-	+ $(MAKE) -C mapleCOMSPS clean
 	rm -f painless

@@ -1,22 +1,20 @@
 #ifndef NDIST
 
 #include "MallobSharing.h"
-#include "clauses/ClauseManager.h"
+#include "utils/ClauseUtils.h"
 #include "utils/Parameters.h"
-#include "utils/MpiTags.h"
+#include "utils/MpiUtils.h"
 #include "utils/Logger.h"
 #include "painless.h"
 #include <cmath>
 #include <algorithm>
 #include <random>
 
-MallobSharing::MallobSharing(int id, GlobalDatabase *g_base) : GlobalSharingStrategy(id, g_base)
+MallobSharing::MallobSharing(std::shared_ptr<GlobalDatabase> g_base) : GlobalSharingStrategy(g_base)
 {
-   b_filter_final = new BloomFilter();
-
     this->maxClauseSize = Parameters::getIntParam("max-cls-size", 30);
     this->totalSize = 0;
-    this->defaultSize = Parameters::getIntParam("gshr-lit", 200 * Parameters::getIntParam("c", 28));
+    this->defaultSize = Parameters::getIntParam("gshr-lit", 1500 * Parameters::getIntParam("c", 28));
     requests_sent = false;
 
     // root_end = 0;
@@ -24,172 +22,45 @@ MallobSharing::MallobSharing(int id, GlobalDatabase *g_base) : GlobalSharingStra
 
 MallobSharing::~MallobSharing()
 {
-    if (!Parameters::getBoolParam("gtest"))
-    {
-        if (mpi_rank == 0)
-        {
-            MPI_Cancel(&end_request);
-        }
-    }
-    delete b_filter_final;
+}
+
+void MallobSharing::joinProcess(int winnerRank, SatResult res, const std::vector<int> &model)
+{
+    this->GlobalSharingStrategy::joinProcess(winnerRank, res, model);
 }
 
 bool MallobSharing::initMpiVariables()
 {
     if (world_size < 2)
     {
-        LOG(0, "[Mallob] I am alone or MPI was not initialized, no need for distributed mode, initialization aborted.\n");
+        LOG("[Mallob] I am alone or MPI was not initialized, no need for distributed mode, initialization aborted");
         return false;
     }
+    // [0]: parent, [1]: right, [2]: left. If it has one child it must be a right one
     right_child = (mpi_rank * 2 + 1 < world_size) ? mpi_rank * 2 + 1 : MPI_UNDEFINED;
     left_child = (mpi_rank * 2 + 2 < world_size) ? mpi_rank * 2 + 2 : MPI_UNDEFINED;
     nb_children = (right_child == MPI_UNDEFINED) ? 0 : (left_child == MPI_UNDEFINED) ? 1
                                                                                      : 2;
-    // floor((rank-1)/2)
     father = (mpi_rank == 0) ? MPI_UNDEFINED : (mpi_rank - 1) / 2;
-    LOG(1, "\t[Mallob %d] parent:%d, left: %d, right: %d\n", mpi_rank, father, left_child, right_child);
-
-    receivedFinalResultRoot = UNKNOWN;
-
-    // For End Management
-    if (mpi_rank == 0)
-    {
-        if (MPI_Irecv(&receivedFinalResultRoot, 1, MPI_INT, MPI_ANY_SOURCE, MYMPI_END, MPI_COMM_WORLD, &end_request) != MPI_SUCCESS)
-        {
-            LOG(0, "Error at MPI_Irecv of GStrat thread!!\n");
-        }
-    }
+    LOG1("[Mallob] parent:%d, left: %d, right: %d", father, left_child, right_child);
 
     // the equation is described in mallob paper and the best value for alpha: https://doi.org/10.1007/978-3-030-80223-3_35
     // int nb_buffers_aggregated = countDescendants(world_size, mpi_rank);
     // this->totalSize = nb_buffers_aggregated * pow(0.875, log2(nb_buffers_aggregated)) * default_size;
-    return true;
-}
-
-bool MallobSharing::testIntegrity()
-{
-
-    // generate random clauses
-    this->totalSize = defaultSize;
-    std::random_device dev;
-    std::mt19937 rng(dev());
-    std::uniform_int_distribution<std::mt19937::result_type> distLit(1, 3000);
-    std::uniform_int_distribution<std::mt19937::result_type> distClsSize(1, 20);
-
-    int nb_clauses = 30;
-    int clause_size;
-    int lbd;
-    int lit;
-    ClauseExchange *p_cls;
-    std::vector<ClauseExchange *> v_cls;
-    std::vector<ClauseExchange *> deserialized_cls;
-    std::vector<std::vector<int>> serialized_v_cls(3);
-    std::vector<int> cls;
-
-    for (int k = 0; k < 3; k++)
-    {
-        for (int i = 0; i < nb_clauses; i++)
-        {
-            cls.clear();
-            clause_size = distClsSize(rng);
-            lbd = distClsSize(rng) % 10 + 1; // 1---10
-            for (int j = 0; j < clause_size; j++)
-            {
-                lit = distLit(rng);
-                lit = (lit % 2 == 0) ? lit : lit * -1;
-                cls.push_back(lit);
-            }
-            p_cls = ClauseManager::initClause(std::move(cls), lbd);
-            globalDatabase->importClause(p_cls);
-            v_cls.push_back(p_cls);
-        }
-
-        serializeClauses(serialized_v_cls[k]);
-        this->totalSize += serialized_v_cls[k].size();
-    }
-
-    std::vector<int> result;
-    std::vector<int> result_sizes;
-
-    mergeSerializedBuffersWithMine(serialized_v_cls, result);
-
-    deserializeClauses(result, &GlobalDatabase::addReceivedClause);
-
-    globalDatabase->exportClauses(deserialized_cls); // get all receveid clauses
-
-    nb_clauses *= 3; // the size of the merge
-
-    if (deserialized_cls.size() != v_cls.size() || deserialized_cls.size() != nb_clauses)
-    {
-        LOG(0, "\t[Mallob %d][Test] Error in size\n", mpi_rank);
-        LOG(0, "\t\t (orig) %d vs (des) %d : gen %d\n", v_cls.size(), deserialized_cls.size(), nb_clauses);
-        return false;
-    }
-
-    for (int i = 0; i < nb_clauses; i++)
-    {
-        result_sizes.push_back(deserialized_cls[i]->lits.size());
-    }
-
-    if (!std::is_sorted(result_sizes.begin(), result_sizes.end()))
-    {
-        LOG(0, "\t[Mallob %d][Test] Error in result size order\n", mpi_rank);
-        return false;
-    }
-
-    // all clauses of deserialized_cls must exist in v_cls and vice versa (the order will surely be different)
-    bool exists;
-    for (int i = 0; i < nb_clauses; i++)
-    {
-        exists = false;
-        p_cls = deserialized_cls[i];
-        for (int j = 0; j < nb_clauses; j++)
-        {
-            if (p_cls->lits == v_cls[j]->lits && p_cls->lbd == v_cls[j]->lbd)
-            {
-                exists = true;
-                break;
-            }
-        }
-        if (!exists)
-        {
-            LOG(0, "\t[Mallob %d][Test] Error in the clause %d of deserialize_cls\n", mpi_rank, i);
-            return false;
-        }
-    }
-
-    for (int i = 0; i < nb_clauses; i++)
-    {
-        exists = false;
-        p_cls = v_cls[i];
-        for (int j = 0; j < nb_clauses; j++)
-        {
-            if (p_cls->lits == deserialized_cls[j]->lits && p_cls->lbd == deserialized_cls[j]->lbd)
-            {
-                exists = true;
-                break;
-            }
-        }
-        if (!exists)
-        {
-            LOG(0, "\t[Mallob %d][Test] Error in the clause %d of v_cls \n", mpi_rank, i);
-            return false;
-        }
-    }
-
-    return true;
+    return GlobalSharingStrategy::initMpiVariables();
 }
 
 // check if can be done with Recv_Init
 bool MallobSharing::doSharing()
 {
-    // Ending Management
-    int end_flag;
     MPI_Status status;
-    // [0]: parent, [1]: right, [2]: left. If it has one child it must be a right one
-    // MPI_Request send_request[nb_children + 1];
-    MPI_Request send_request;
-    SatResult receivedFinalResultBcast = UNKNOWN;
+
+    /* Ending Detection */
+    if (GlobalSharingStrategy::doSharing())
+    {
+        this->joinProcess(mpi_winner, finalResult, {});
+        return true;
+    }
 
     // Sharing Management
     std::vector<int> my_clauses_buffer;
@@ -198,74 +69,9 @@ bool MallobSharing::doSharing()
     int buffer_size = 0;
     int nb_buffers_aggregated = 1; // my buffer is accounted here
 
-    if (globalEnding && !requests_sent && mpi_rank != 0) // send end only once
-    {
-        LOG(1, "\t[Mallob %d] It is the end, now I will send end to the root\n", mpi_rank);
-        MPI_Isend(&finalResult, 1, MPI_INT, 0, MYMPI_END, MPI_COMM_WORLD, &send_request);
-        requests_sent = true;
-        // I cannot leave yet, need to participate in the split once.
-    }
-
-    if (mpi_rank == 0)
-    {
-        if (globalEnding) // to check if the root found the solution
-        {
-            receivedFinalResultBcast = finalResult;
-            LOG(1, "\t[Mallob %d] It is the end, now I will send end to all descendants (%d)\n", mpi_rank, receivedFinalResultBcast);
-        }
-        else // check recv only if root didn't end
-        {
-            MPI_Test(&end_request, &end_flag, &status);
-            if (end_flag)
-            {
-                LOG(1, "\t[Mallob %d] Ending received from %d (%d)\n", mpi_rank, status.MPI_SOURCE, receivedFinalResultRoot);
-                globalEnding = true;
-                receivedFinalResultBcast = receivedFinalResultRoot;
-                // root_end = 1;
-                // end arrived to the root. Know it should tell everyone
-            }
-        }
-    }
-
-    // Broadcast 0 or 1 to
-    MPI_Bcast(&receivedFinalResultBcast, 1, MPI_INT, 0, MPI_COMM_WORLD);
-    LOG(1, "\t[Mallob %d] Received finalResult = %d \n", mpi_rank, receivedFinalResultBcast);
-
-    if (receivedFinalResultBcast != UNKNOWN)
-    {
-        LOG(1, "\t[Mallob %d] It is the real end: %d\n", mpi_rank, receivedFinalResultBcast);
-        globalEnding = true;
-        finalResult = receivedFinalResultBcast;
-        return true;
-    }
-
     // SHARING
     //========
-    // send my clauses to my parent if leaf then wait of its response
-    if (father != MPI_UNDEFINED && nb_children == 0)
-    {
-        this->totalSize = nb_buffers_aggregated * pow(0.875, log2(nb_buffers_aggregated)) * defaultSize;
-        LOG(1, "\t[Mallob %d] TotalSize = %d\n", mpi_rank, totalSize);
-
-        my_clauses_buffer.clear();
-
-        gstats.sharedClauses += serializeClauses(my_clauses_buffer);
-
-        my_clauses_buffer.push_back(nb_buffers_aggregated); // number of buffers aggregated
-
-        //  I am a leaf so i will only send my clauses (no merge)
-        MPI_Send(&my_clauses_buffer[0], my_clauses_buffer.size(), MPI_INT, father, MYMPI_CLAUSES, MPI_COMM_WORLD);
-        gstats.messagesSent++;
-
-        // Now I will wait for my father's response
-        MPI_Probe(father, MYMPI_CLAUSES, MPI_COMM_WORLD, &status);
-        MPI_Get_count(&status, MPI_INT, &received_buffer_size);
-        receivedClauses.resize(received_buffer_size);
-
-        MPI_Recv(&receivedClauses[0], received_buffer_size, MPI_INT, father, MYMPI_CLAUSES, MPI_COMM_WORLD, &status);
-    }
-
-    // if not leaf and not root, wait for children clauses then send to parent
+    // if not leaf , wait for children clauses
     if (nb_children >= 1) // has a right child wanting to share
     {
         receivedClauses.clear();
@@ -296,36 +102,41 @@ bool MallobSharing::doSharing()
             // add the clause to the mergeBuffer
             buffers.push_back(std::move(receivedClauses));
         }
-    }
 
-    // prepare my clauses (root and middle node)
-    if (nb_children > 0)
-    {
         this->totalSize = nb_buffers_aggregated * pow(0.875, log2(nb_buffers_aggregated)) * defaultSize;
-        LOG(1, "\t[Mallob %d] TotalSize = %d(%d)\n", mpi_rank, totalSize, nb_buffers_aggregated);
+        LOG2("[Mallob] TotalSize = %d(%d)", totalSize, nb_buffers_aggregated);
 
         my_clauses_buffer.clear();
 
-        gstats.sharedClauses += serializeClauses(my_clauses_buffer);
+        serializeClauses(my_clauses_buffer);
 
         clausesToSendSerialized.clear();
 
         // add my clauses to the merge buffer
-        buffers.push_back(my_clauses_buffer);
+        buffers.push_back(std::move(my_clauses_buffer));
 
-        // merge then send the result or bcast (if root)
+        // if I am leaf merge does nothing
         gstats.sharedClauses += mergeSerializedBuffersWithMine(buffers, clausesToSendSerialized);
-    }
 
-    // Middle Node
-    if (father != MPI_UNDEFINED && nb_children > 0)
-    {
         clausesToSendSerialized.push_back(nb_buffers_aggregated); // number of buffers aggregated
 
-        // Send to my parent the merge result
+        // Send to my parent the merge result,
         MPI_Send(&clausesToSendSerialized[0], clausesToSendSerialized.size(), MPI_INT, father, MYMPI_CLAUSES, MPI_COMM_WORLD);
         gstats.messagesSent++;
+    }
+    else // leaf
+    {
+        gstats.sharedClauses += serializeClauses(my_clauses_buffer);
+        my_clauses_buffer.push_back(nb_buffers_aggregated); // number of buffers aggregated
 
+        //  I am a leaf so i will only send my clauses (no merge)
+        MPI_Send(&my_clauses_buffer[0], my_clauses_buffer.size(), MPI_INT, father, MYMPI_CLAUSES, MPI_COMM_WORLD);
+        gstats.messagesSent++;
+    }
+
+    // If not root wait for parent
+    if (father != MPI_UNDEFINED)
+    {
         // Wait for my parent's response
         // Now I will wait for my father's response
         MPI_Probe(father, MYMPI_CLAUSES, MPI_COMM_WORLD, &status);
@@ -334,8 +145,7 @@ bool MallobSharing::doSharing()
 
         MPI_Recv(&receivedClauses[0], received_buffer_size, MPI_INT, father, MYMPI_CLAUSES, MPI_COMM_WORLD, &status);
     }
-
-    if (mpi_rank == 0)
+    else
     {
         receivedClauses = std::move(clausesToSendSerialized);
         received_buffer_size = receivedClauses.size();
@@ -346,8 +156,7 @@ bool MallobSharing::doSharing()
     {
         MPI_Send(&receivedClauses[0], received_buffer_size, MPI_INT, right_child, MYMPI_CLAUSES, MPI_COMM_WORLD);
         gstats.messagesSent++;
-
-        if (nb_children >= 2)
+        if (nb_children == 2)
         {
             MPI_Send(&receivedClauses[0], received_buffer_size, MPI_INT, left_child, MYMPI_CLAUSES, MPI_COMM_WORLD);
             gstats.messagesSent++;
@@ -356,6 +165,8 @@ bool MallobSharing::doSharing()
 
     // deserialize for all
     deserializeClauses(receivedClauses, &GlobalDatabase::addReceivedClause);
+
+    LOG2("[Mallob] received cls %u shared cls %d", this->gstats.receivedClauses, this->gstats.sharedClauses);
     return false;
 }
 
@@ -367,65 +178,57 @@ bool MallobSharing::doSharing()
 int MallobSharing::serializeClauses(std::vector<int> &serialized_v_cls)
 {
     int clausesSelected = 0;
-    ClauseExchange *tmp_cls;
+    std::shared_ptr<ClauseExchange> tmp_cls;
 
-    // Temporary bloom filter to not serialized twice the same clause
     BloomFilter b_filter;
 
-    int dataCount = serialized_v_cls.size(); // it is an append operation so datacount do not start from zero
+    unsigned dataCount = serialized_v_cls.size(); // it is an append operation so datacount do not start from zero
 
-    while (dataCount < totalSize && globalDatabase->getClauseToSend(&tmp_cls))
+    while (dataCount < totalSize && globalDatabase->getClauseToSend(tmp_cls))
     {
         // to not overflow the sending buffer: do not add if the clause size + lbd and the 0 will cause an overflow
         if (dataCount + tmp_cls->size + 2 > totalSize)
         {
-            LOG(1, "\t[Mallob %d] Serialization overflow avoided, %d/%d, wanted to add %d\n", mpi_rank, dataCount, totalSize, tmp_cls->size + 2);
+            LOGDEBUG1("Mallob] Serialization overflow avoided, %d/%d, wanted to add %d", dataCount, totalSize, tmp_cls->size + 2);
             globalDatabase->importClause(tmp_cls); // reinsert if doesn't fit
             break;
         }
 
-        // check if not received previously and is not already serialized
-        if (!this->b_filter_final->contains(tmp_cls->lits) && !b_filter.contains(tmp_cls->lits))
+        // check if not received previously and is not already serialized or sent previously
+        if (!this->b_filter_final.contains(tmp_cls->lits))
         {
             serialized_v_cls.insert(serialized_v_cls.end(), tmp_cls->lits.begin(), tmp_cls->lits.end());
             serialized_v_cls.push_back((tmp_cls->lbd == 0) ? -1 : tmp_cls->lbd);
             serialized_v_cls.push_back(0);
-            b_filter.insert(tmp_cls->lits);
+            this->b_filter_final.insert(tmp_cls->lits);
             clausesSelected++;
 
             dataCount += (2 + tmp_cls->size);
             // lbd and 0 and clause size
             // decrement ref
-            ClauseManager::releaseClause(tmp_cls);
         }
         else
         {
             gstats.sharedDuplicasAvoided++;
-            // std::cout << "Duplicate : " << tmp_cls->nbRefs;
-            ClauseManager::releaseClause(tmp_cls);
-            // std::cout << " -> " << tmp_cls->nbRefs << std::endl;
         }
     }
 
     if (dataCount > totalSize)
     {
-        LOG(0, "Panic!! datacount(%d) > totalsize(%d). Deserialization will create erroenous clauses\n", dataCount, totalSize);
-        exit(1);
+        LOGWARN("Panic!! datacount(%d) > totalsize(%d). Deserialization will create erroenous clauses", dataCount, totalSize);
     }
     return clausesSelected;
 }
 
-void MallobSharing::deserializeClauses(std::vector<int> &serialized_v_cls, bool (GlobalDatabase::*add)(ClauseExchange *cls))
+void MallobSharing::deserializeClauses(std::vector<int> &serialized_v_cls, bool (GlobalDatabase::*add)(std::shared_ptr<ClauseExchange> cls))
 {
     std::vector<int> tmp_cls;
     int current_cls = 0;
     int nb_clauses = 0;
     int lbd;
-    const uint source_id = globalDatabase->getId();
-    const uint buffer_size = serialized_v_cls.size();
-    ClauseExchange *p_cls;
-
-   
+    const unsigned source_id = globalDatabase->getId();
+    const unsigned buffer_size = serialized_v_cls.size();
+    std::shared_ptr<ClauseExchange> p_cls;
 
     for (int i = 0; i < buffer_size; i++)
     {
@@ -438,12 +241,12 @@ void MallobSharing::deserializeClauses(std::vector<int> &serialized_v_cls, bool 
             lbd = (tmp_cls.back() == -1) ? 0 : tmp_cls.back();
             tmp_cls.pop_back();
 
-            if (!this->b_filter_final->contains(tmp_cls))
+            if (!this->b_filter_final.contains(tmp_cls))
             {
-                p_cls = ClauseManager::initClause(std::move(tmp_cls), lbd, source_id);
-                if ((globalDatabase->*add)(p_cls))
+                p_cls = std::make_shared<ClauseExchange>(std::move(tmp_cls), lbd, source_id);
+                if ((globalDatabase.get()->*add)(p_cls))
                     gstats.receivedClauses++;
-                this->b_filter_final->insert(tmp_cls); // either added or not wanted (>maxclauseSize)
+                this->b_filter_final.insert(tmp_cls); // either added or not wanted (>maxclauseSize)
             }
             else
             {
@@ -457,18 +260,18 @@ void MallobSharing::deserializeClauses(std::vector<int> &serialized_v_cls, bool 
 
 int MallobSharing::mergeSerializedBuffersWithMine(std::vector<std::vector<int>> &buffers, std::vector<int> &result)
 {
-    uint dataCount = 0;
-    uint nb_clauses = 0;
-    uint lbd = 0;
-    uint buffer_count = buffers.size();
-    std::vector<uint> indexes(buffer_count, 0);
-    std::vector<uint> buffer_sizes(buffer_count);
-    std::vector<uint> current_cls(buffer_count, 0);
+    unsigned dataCount = 0;
+    unsigned nb_clauses = 0;
+    unsigned lbd = 0;
+    unsigned buffer_count = buffers.size();
+    std::vector<unsigned> indexes(buffer_count, 0);
+    std::vector<unsigned> buffer_sizes(buffer_count);
+    std::vector<unsigned> current_cls(buffer_count, 0);
     std::vector<std::vector<int>> tmp_clauses;
 
     std::vector<std::vector<int>>::iterator min_cls;
 
-     // Temporary bloom filter to not push twice the same clause, no need to check with b_filter_final since everyone checks at serialization
+    // Temporary bloom filter to not push twice the same clause, no need to check with b_filter_final since everyone checks at serialization
     BloomFilter b_filter;
 
     for (int i = 0; i < buffer_count; i++)
@@ -483,7 +286,7 @@ int MallobSharing::mergeSerializedBuffersWithMine(std::vector<std::vector<int>> 
         {
             if (indexes[k] >= buffer_sizes[k]) // a buffer is all seen, erase its cell in all vectors
             {
-                LOG(2, "\t[Mallob %d] Buffer at %d will be removed since it is empty\n", mpi_rank, k);
+                LOGDEBUG1("Mallob] Buffer at %d will be removed since it is empty", k);
                 buffers.erase(buffers.begin() + k);
                 indexes.erase(indexes.begin() + k);
                 buffer_sizes.erase(buffer_sizes.begin() + k);
@@ -526,7 +329,7 @@ int MallobSharing::mergeSerializedBuffersWithMine(std::vector<std::vector<int>> 
             }
             else
             {
-                LOG(2, "Overflow avoided[1] , %d / %d \n", dataCount, totalSize);
+                LOGDEBUG1("Overflow avoided[1] , %d / %d ", dataCount, totalSize);
                 break;
             }
         }
@@ -534,10 +337,10 @@ int MallobSharing::mergeSerializedBuffersWithMine(std::vector<std::vector<int>> 
             break;
     }
 
-    // Adding remaining clauses to clausesToSend database
+    // adding remaining clauses to clausesToSend database
     if (buffer_count > 0)
     { // clauses remained
-        std::vector<ClauseExchange *> v_cls;
+        std::vector<std::shared_ptr<ClauseExchange>> v_cls;
         std::vector<int> tmp_buff;
         for (int j = 0; j < buffer_count; j++)
         {

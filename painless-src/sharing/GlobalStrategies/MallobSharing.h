@@ -9,8 +9,8 @@
 class MallobSharing : public GlobalSharingStrategy
 {
 public:
-    /// @brief Constructor
-    MallobSharing(int id, GlobalDatabase *g_base);
+    /// @brief Constructor: If the -nb-bloom-gstrat is set to 1 then b_filters[0] is used for clausesToSend and receivedClauses. else no bloom
+    MallobSharing( std::shared_ptr<GlobalDatabase> g_base);
     /// Destructor
     ~MallobSharing();
 
@@ -21,9 +21,7 @@ public:
     /// @return true if sharer can break and join, false otherwise
     bool doSharing() override;
 
-    /// @brief test if the serialization and deserialization don't modify the data
-    /// @return if the test run correctly
-    bool testIntegrity();
+    void joinProcess(int winnerRank, SatResult res, const std::vector<int> &model) override;
 
 protected:
     /// @brief A function that serializes ClauseExchange from clausesToSend database to an int vector ( no bloom version)
@@ -34,7 +32,7 @@ protected:
     /// @brief A function that deserialize a buffer of int to ClauseExchange object and adds them to a given database (no bloom version)
     /// @param serialized_v_cls the vector with the serialized data
     /// @param add defines the method to be called to add the deserialized clause to a database
-    void deserializeClauses(std::vector<int> &serialized_v_cls, bool (GlobalDatabase::*add)(ClauseExchange *cls));
+    void deserializeClauses(std::vector<int> &serialized_v_cls, bool (GlobalDatabase::*add)(std::shared_ptr<ClauseExchange> cls));
 
     /// @brief A function that adds the received buffers to clauseTosend then generates the serialized buffer to send (no bloom version)
     /// @details after the k-merge, we keep the remaining received clauses since they may be still useful in future rounds
@@ -44,10 +42,10 @@ protected:
     int mergeSerializedBuffersWithMine(std::vector<std::vector<int>> &buffers, std::vector<int> &result);
 
     /// @brief the size of the buffer to send
-    uint totalSize;
+    unsigned totalSize;
 
     /// @brief the default size given as parameter
-    uint defaultSize;
+    unsigned defaultSize;
 
     /// @brief The max clause size to accept (needed in merge)
     int maxClauseSize;
@@ -57,16 +55,7 @@ protected:
 
     /// @brief bloom filter deserialization(final buffer: received from root)
     /// @details since the final buffer is the same for all the nodes it is not worth sending the clauses next round.
-    BloomFilter *b_filter_final;
-
-    /// @brief Bool to know if request to end was sent to the root
-    bool requests_sent;
-
-    /// @brief Request of the non blocking receive end
-    MPI_Request end_request;
-
-    /// @brief Stores the result received from others
-    SatResult receivedFinalResultRoot;
+    BloomFilter b_filter_final;
 
     /// @brief the buffers with the data to be merged.
     std::vector<std::vector<int>> buffers;

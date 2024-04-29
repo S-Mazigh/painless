@@ -19,9 +19,9 @@
 
 #include "utils/Logger.h"
 #include "working/SequentialWorker.h"
-#include "solvers/KissatMABSolver.h"
 #include "painless.h"
 #include "utils/SatUtils.h"
+#include "utils/Parameters.h"
 
 #include <unistd.h>
 
@@ -40,7 +40,7 @@ void *mainWorker(void *arg)
    {
       pthread_mutex_lock(&sq->mutexStart);
 
-      if (sq->waitJob == true)
+      while (sq->waitJob == true)
       {
          pthread_cond_wait(&sq->mutexCondStart, &sq->mutexStart);
       }
@@ -48,12 +48,8 @@ void *mainWorker(void *arg)
       pthread_mutex_unlock(&sq->mutexStart);
 
       sq->waitInterruptLock.lock();
-
-      do
-      {
-         // printf("Solver %d solve() to be called.\n",sq->solver->id);
-         res = sq->solver->solve(sq->actualCube);
-      } while (sq->force == false && res == UNKNOWN);
+      
+      res = sq->solver->solve(sq->actualCube); // why pass by param what the solver already has ?
 
       sq->waitInterruptLock.unlock();
 
@@ -62,7 +58,7 @@ void *mainWorker(void *arg)
          model = sq->solver->getModel();
       }
 
-      sq->join(NULL, res, model);
+      sq->join(NULL, res, model); // assign true to force ! No need for sq->force==false in while loop (see original painless)
 
       model.clear();
 
@@ -73,7 +69,7 @@ void *mainWorker(void *arg)
 }
 
 // Constructor
-SequentialWorker::SequentialWorker(SolverInterface *solver_)
+SequentialWorker::SequentialWorker(std::shared_ptr<SolverInterface> solver_)
 {
    solver = solver_;
    force = false;
@@ -88,15 +84,14 @@ SequentialWorker::SequentialWorker(SolverInterface *solver_)
 // Destructor
 SequentialWorker::~SequentialWorker()
 {
-   setInterrupt();
+   if (!force)
+      setInterrupt();
 
    worker->join();
    delete worker;
 
    pthread_mutex_destroy(&mutexStart);
    pthread_cond_destroy(&mutexCondStart);
-
-   solver->release();
 }
 
 void SequentialWorker::solve(const std::vector<int> &cube)
@@ -117,11 +112,15 @@ void SequentialWorker::join(WorkingStrategy *winner, SatResult res,
 {
    force = true;
 
+   LOGDEBUG1("SequentialWorker %p is joining with res = %d.", this, res);
+
    if (globalEnding)
       return;
 
    if (parent == NULL)
    {
+      worker->join();
+
       globalEnding = true;
       finalResult = res;
 
@@ -135,6 +134,7 @@ void SequentialWorker::join(WorkingStrategy *winner, SatResult res,
    }
    else
    {
+      LOGDEBUG1("SequentialWorker %p calls its parent",this);
       parent->join(this, res, model);
    }
 }
@@ -155,19 +155,4 @@ void SequentialWorker::unsetInterrupt()
 {
    force = false;
    solver->unsetSolverInterrupt();
-}
-
-int SequentialWorker::getDivisionVariable()
-{
-   return solver->getDivisionVariable();
-}
-
-void SequentialWorker::setPhase(const int var, const bool phase)
-{
-   solver->setPhase(var, phase);
-}
-
-void SequentialWorker::bumpVariableActivity(const int var, const int times)
-{
-   solver->bumpVariableActivity(var, times);
 }

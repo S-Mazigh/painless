@@ -40,25 +40,25 @@ public:
    /// Constructor.
    Mutex()
    {
-      TESTRUN(pthread_mutex_init(&mtx, NULL), "Mutex init failed with msg %d\n")
+      TESTRUN(pthread_mutex_init(&mtx, NULL), "Mutex init failed with msg %d")
    }
 
    /// Destructor.
    virtual ~Mutex()
    {
-      TESTRUN(pthread_mutex_destroy(&mtx), "Mutex destroy failed with msg %d\n")
+      TESTRUN(pthread_mutex_destroy(&mtx), "Mutex destroy failed with msg %d")
    }
 
    /// Lock the mutex.
    void lock()
    {
-      TESTRUN(pthread_mutex_lock(&mtx), "Mutex lock failed with msg %d\n")
+      TESTRUN(pthread_mutex_lock(&mtx), "Mutex lock failed with msg %d")
    }
 
    /// Unlock the mutex.
    void unlock()
    {
-      TESTRUN(pthread_mutex_unlock(&mtx), "Mutex unlock failed with msg %d\n")
+      TESTRUN(pthread_mutex_unlock(&mtx), "Mutex unlock failed with msg %d")
    }
 
    /// Try to lock the mutex, return true if succes else false.

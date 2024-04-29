@@ -1,38 +1,36 @@
-SRCS = $(shell find . -name "*.cpp")
+SRCS := $(shell find . -name "*.cpp" -not -path "./.ignores/*")
 
 OBJS = $(addsuffix .o, $(basename $(SRCS)))
 
 EXEC = painless
 
+YALSAT_BUILD := ../solvers/yalsat
 
-#/kissat_mab/build
-#../my_kissat_mab/build
-KISSAT_BUILD := ../kissat_mab/build
+KISSAT_BUILD := ../solvers/kissat_mab/build
 
-KISSAT_DFLAGS := $(shell cat $(KISSAT_BUILD)/makefile | grep -oP "CFLAGS=(.+)" | grep -o '\-D[^ ]*')
+KISSATGASPI_BUILD := ../solvers/GASPIKISSAT/build
 
-KISSAT_DEBUG := $(shell cat $(KISSAT_BUILD)/makefile | grep -oP "CFLAGS=(.+)" | grep -o '\-O[^ ]*')
-KISSAT_DEBUG += $(shell cat $(KISSAT_BUILD)/makefile | grep -oP "CFLAGS=(.+)" | grep -o '\-g[^ ]*')
+# KISSAT_DFLAGS := $(shell cat $(KISSAT_BUILD)/makefile | grep -oP "CFLAGS=(.+)" | grep -o '\-D[^ ]*')
+
+CXX := g++#mpic++
+
+STATIC_FLAGS := #-static-libstdc++ -static-libgcc
 
 
-CXX = g++#mpic++
-
-#        -L../openMPI/lib -lmpi
-LIBS = -lkissat -L$(KISSAT_BUILD) \
-       -lmapleCOMSPS -L../mapleCOMSPS/build/release/lib/ \
-       -l:libm4ri.a -L../mapleCOMSPS/m4ri-20140914/.libs \
+LIBS := -l:libyals.a -L$(YALSAT_BUILD) \
+       -l:libkissat.a -L$(KISSAT_BUILD) \
+       -l:libgkissat.a -L$(KISSATGASPI_BUILD) \
+       -l:libmapleCOMSPS.a -L../solvers/mapleCOMSPS/build/release/lib/ \
+       -l:libm4ri.a -L../libs/m4ri-20200125/.libs \
        -lpthread -lz -lm $(shell mpic++ --showme:link)
 
-# -I../openMPI/include
-CXXFLAGS = -I. \
-           -I.. \
-           -I../mapleCOMSPS \
+CXXFLAGS := -I. \
+           -I../solvers \
+           -I../libs/eigen-3.4.0 \
+           -I../libs/m4ri-20200125 \
            $(shell mpic++ --showme:compile)\
-           -D __STDC_LIMIT_MACROS -D __STDC_FORMAT_MACROS $(KISSAT_DFLAGS) \
-           -fopenmp -std=c++17 $(KISSAT_DEBUG) # -fsanitize=address -DQUIET #
-
-
-$(info "KISSAT_DFLAGS = $(KISSAT_DFLAGS), KISSAT_DEPENDENCIES = $(KISSAT_DEPENDENCIES)" KISSAT_DEBUG = $(KISSAT_DEBUG))
+           -D __STDC_LIMIT_MACROS -D __STDC_FORMAT_MACROS \
+           -fopenmp $(STATIC_FLAGS) -std=c++17 -O3 -DNDEBUG#-O0 -g3 #-O3 -DNDEBUG#-fsanitize=address#-fsanitize=thread #
 
 $(EXEC): $(OBJS)
 	$(CXX) -o $@ $^ $(CXXFLAGS) $(LIBS)

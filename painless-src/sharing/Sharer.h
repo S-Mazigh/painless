@@ -20,8 +20,9 @@
 #pragma once
 
 #include "sharing/SharingStrategy.h"
-#include "sharing/SharingEntity.h"
+#include "sharing/SharingEntity.hpp"
 #include "utils/Threading.h"
+#include "utils/Logger.h"
 
 static void *mainThrSharing(void *arg);
 
@@ -29,28 +30,15 @@ static void *mainThrSharing(void *arg);
 /// \ingroup sharing
 
 /// @brief A sharer is a thread responsible to share clauses between solvers.
-class Sharer
+class Sharer : public Entity
 {
 public:
    /// Constructors.
-   Sharer(int id_, SharingStrategy *sharingStrategy_);
-
-   Sharer(int id_);
+   Sharer(int id_, std::vector<std::shared_ptr<SharingStrategy>> &sharingStrategies);
+   Sharer(int id_, std::shared_ptr<SharingStrategy> sharingStrategy);
 
    /// Destructor.
    virtual ~Sharer();
-
-   /// Add a sharingEntity to the producers.
-   void addProducer(SharingEntity *sharingEntity);
-
-   /// Add a sharingEntity to the consumers.
-   void addConsumer(SharingEntity *sharingEntity);
-
-   /// Remove a sharingEntity from the producers.
-   void removeProducer(SharingEntity *sharingEntity);
-
-   /// Remove a sharingEntity from the consumers.
-   void removeConsumer(SharingEntity *sharingEntity);
 
    /// Print sharing statistics.
    virtual void printStats();
@@ -58,38 +46,23 @@ public:
    /// @brief To join the thread of this sharer object
    inline void join()
    {
-      LOG(2, "Sharer %d joined\n", id);
       sharer->join();
+      LOGDEBUG1("Sharer %d joined", id);
    }
 
 protected:
+   /// Pointer to the thread in charge of sharing.
+   Thread *sharer;
+   
+   /// @brief Heuristic for strategy implementation comparaison (TODO: ifndef NSTAT for such probes)
+   double totalSharingTime = 0;
+
+   /// Strategy/Strategies used to shared clauses.
+   std::vector<std::shared_ptr<SharingStrategy>> sharingStrategies;
+
+   /// @brief Working function that will call sharingStrategy doSharing()
+   /// @param  sharer the sharer object
+   /// @return NULL if well ended
    friend void *mainThrSharing(void *);
 
-   /// Id of the sharer.
-   int id;
-
-   /// Mutex used to add producers and consumers.
-   Mutex addLock;
-
-   /// Mutex used to add producers and consumers.
-   Mutex removeLock;
-
-   /// Vector of solvers or GStrats to add to the producers.
-   std::vector<SharingEntity *> addProducers;
-
-   /// Vector of solvers or GStrats to add to the consumers.
-   std::vector<SharingEntity *> addConsumers;
-
-   /// Vector of solvers or GStrats to remove from the producers.
-   std::vector<SharingEntity *> removeProducers;
-
-   /// Vector of solvers or GStrats to remove from the consumers.
-   std::vector<SharingEntity *> removeConsumers;
-
-   /// Pointer to the thread in chrage of sharing.
-   Thread *sharer;
-
-private:
-   /// Strategy used to shared clauses.
-   SharingStrategy *sharingStrategy;
 };

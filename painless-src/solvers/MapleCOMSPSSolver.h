@@ -20,10 +20,24 @@
 #pragma once
 
 #include "clauses/ClauseBuffer.h"
-#include "solvers/SolverInterface.hpp"
+#include "solvers/SolverCdclInterface.hpp"
 #include "utils/Threading.h"
 
-using namespace std;
+#define MAPLECOMSPS_
+
+struct parameter
+{
+   int tier1;
+   int chrono;
+   int stable;
+   int walkinitially;
+   int target;
+   int phase;
+   int heuristic;
+   int margin;
+   int ccanr;
+   int targetinc;
+};
 
 // Some forward declatarations for MapleCOMSPS
 namespace MapleCOMSPS
@@ -34,12 +48,11 @@ namespace MapleCOMSPS
    class vec;
 }
 
+/// \ingroup solving
 /// Instance of a MapleCOMSPS solver
-class MapleCOMSPSSolver : public SolverInterface
+class MapleCOMSPSSolver : public SolverCdclInterface
 {
 public:
-   /// Load formula from a given dimacs file, return false if failed.
-   bool loadFormula(const char *filename);
 
    /// Get the number of variables of the current resolution.
    int getVariablesCount();
@@ -48,7 +61,7 @@ public:
    int getDivisionVariable();
 
    /// Set initial phase for a given variable.
-   void setPhase(const int var, const bool phase);
+   void setPhase(const unsigned var, const bool phase);
 
    /// Bump activity of a given variable.
    void bumpVariableActivity(const int var, const int times);
@@ -60,25 +73,28 @@ public:
    void unsetSolverInterrupt();
 
    /// Solve the formula with a given cube.
-   SatResult solve(const vector<int> &cube);
+   SatResult solve(const std::vector<int> &cube);
 
    /// Add a permanent clause to the formula.
-   void addClause(ClauseExchange *clause);
+   void addClause(std::shared_ptr<ClauseExchange> clause);
 
    /// Add a list of permanent clauses to the formula.
-   void addClauses(const vector<ClauseExchange *> &clauses);
+   void addClauses(const std::vector<std::shared_ptr<ClauseExchange> > &clauses);
 
    /// Add a list of initial clauses to the formula.
-   void addInitialClauses(const vector<ClauseExchange *> &clauses);
+   void addInitialClauses(const std::vector<simpleClause> &clauses, unsigned nbVars) override;
+
+   /// Load formula from a given dimacs file, return false if failed.
+   void loadFormula(const char *filename) override; 
 
    /// Add a learned clause to the formula.
-   bool importClause(ClauseExchange *clause);
+   bool importClause(std::shared_ptr<ClauseExchange> clause);
 
    /// Add a list of learned clauses to the formula.
-   void importClauses(const vector<ClauseExchange *> &clauses);
+   void importClauses(const std::vector<std::shared_ptr<ClauseExchange> > &clauses);
 
    /// Get a list of learned clauses.
-   void exportClauses(vector<ClauseExchange *> &clauses);
+   void exportClauses(std::vector<std::shared_ptr<ClauseExchange> > &clauses);
 
    /// Request the solver to produce more clauses.
    void increaseClauseProduction();
@@ -87,13 +103,15 @@ public:
    void decreaseClauseProduction();
 
    /// Get solver statistics.
-   SolvingStatistics getStatistics();
+   void printStatistics();
 
    /// Return the model in case of SAT result.
-   vector<int> getModel();
+   std::vector<int> getModel();
 
    /// Native diversification.
-   void diversify();
+   /// @param noise added for some radomness
+   /// @param family to enable some parameters dependent on the family
+   void diversify(std::mt19937 &rng_engine, std::uniform_int_distribution<int> &uniform_dist);
 
    /// Constructor.
    MapleCOMSPSSolver(int id);
@@ -101,22 +119,18 @@ public:
    /// Copy constructor.
    MapleCOMSPSSolver(const MapleCOMSPSSolver &other, int id);
 
-   void addOriginClauses(simplify *S);
-
    /// Destructor.
    virtual ~MapleCOMSPSSolver();
 
-   vector<int> getFinalAnalysis();
+   std::vector<int> getFinalAnalysis();
 
-   vector<int> getSatAssumptions();
+   std::vector<int> getSatAssumptions();
 
    void setStrengthening(bool b);
 
    void setParameter(parameter p){};
 
    void initshuffle(int id){};
-
-   void setBumpVar(int v) {}
 
 protected:
    /// Pointer to a MapleCOMSPS solver.
@@ -132,11 +146,8 @@ protected:
    /// Buffer used to add permanent clauses.
    ClauseBuffer clausesToAdd;
 
-   /// Size limit used to share clauses.
-   atomic<int> lbdLimit;
-
    /// Used to stop or continue the resolution.
-   atomic<bool> stopSolver;
+   std::atomic<bool> stopSolver;
 
    /// Callback to export/import clauses.
    friend MapleCOMSPS::Lit cbkMapleCOMSPSImportUnit(void *);

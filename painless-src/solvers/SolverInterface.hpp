@@ -20,30 +20,18 @@
 #pragma once
 
 #include "clauses/ClauseExchange.h"
-#include "simplify/simplify.h"
-#include "sharing/SharingEntity.h"
+#include "sharing/SharingEntity.hpp"
+#include "utils/Logger.h"
+#include "utils/ClauseUtils.h"
 
 #include <stdlib.h>
 #include <stdio.h>
 #include <vector>
-using namespace std;
+#include <memory>
+#include <random>
 
 #define ID_SYM 0
 #define ID_XOR 1
-
-struct parameter
-{
-   int tier1;
-   int chrono;
-   int stable;
-   int walkinitially;
-   int target;
-   int phase;
-   int heuristic;
-   int margin;
-   int ccanr;
-   int targetinc;
-};
 
 /// Code for SAT result
 enum SatResult
@@ -54,58 +42,26 @@ enum SatResult
    UNKNOWN = 0
 };
 
-/// Code  for the type of solvers
-enum SolverType
+/// @brief Code for the type of algorithm of solvers
+enum SolverAlgorithmType
 {
-   GLUCOSE = 0,
-   LINGELING = 1,
-   MAPLE = 2,
-   MINISAT = 3,
-   KISSAT = 4
+   CDCL = 0,
+   LOCAL_SEARCH = 1,
+   PREPROCESSING = 2,
 };
 
-/// Structure for solver statistics
-struct SolvingStatistics
-{
-   /// Constructor
-   SolvingStatistics()
-   {
-      propagations = 0;
-      decisions = 0;
-      conflicts = 0;
-      restarts = 0;
-      memPeak = 0;
-   }
+/// \defgroup solving Solving/Preprocessing Related Classes
+/// \ingroup solving
 
-   unsigned long propagations; ///< Number of propagations.
-   unsigned long decisions;    ///< Number of decisions taken.
-   unsigned long conflicts;    ///< Number of reached conflicts.
-   unsigned long restarts;     ///< Number of restarts.
-   double memPeak;             ///< Maximum memory used in Ko.
-};
-
-/// Interface of a solver that provides standard features.
-class SolverInterface : public SharingEntity
+/// @brief Interface of a solver that provides standard features.
+class SolverInterface
 {
 public:
-   /// Load formula from a given dimacs file, return false if failed.
-   virtual void addOriginClauses(simplify *S) = 0;
-
-   virtual void setBumpVar(int v) = 0;
-
-   virtual bool loadFormula(const char *filename) = 0;
-
-   /// Get the number of variables of the current resolution.
+   /// Get the current number of variables.
    virtual int getVariablesCount() = 0;
 
    /// Get a variable suitable for search splitting.
    virtual int getDivisionVariable() = 0;
-
-   /// Set initial phase for a given variable.
-   virtual void setPhase(const int var, const bool phase) = 0;
-
-   /// Bump activity of a given variable.
-   virtual void bumpVariableActivity(const int var, const int times) = 0;
 
    /// Interrupt resolution, solving cannot continue until interrupt is unset.
    virtual void setSolverInterrupt() = 0;
@@ -113,65 +69,51 @@ public:
    /// Remove the SAT solving interrupt request.
    virtual void unsetSolverInterrupt() = 0;
 
+   /// So that the working strategies support all SolverInterface's.
+   virtual void printWinningLog()
+   {
+      LOGSTAT("The winner is of type: %s", (this->algoType) ? (this->algoType == 1) ? "LOCAL_SEARCH" : "PREPROCESSING" : "CDCL");
+   }
+
    /// Solve the formula with a given cube.
    virtual SatResult solve(const std::vector<int> &cube) = 0;
 
    /// Add a permanent clause to the formula.
-   virtual void addClause(ClauseExchange *clause) = 0;
+   virtual void addClause(std::shared_ptr<ClauseExchange> clause) = 0;
 
    /// Add a list of permanent clauses to the formula.
-   virtual void addClauses(const std::vector<ClauseExchange *> &clauses) = 0;
+   virtual void addClauses(const std::vector<std::shared_ptr<ClauseExchange>> &clauses) = 0;
 
    /// Add a list of initial clauses to the formula.
-   virtual void addInitialClauses(const std::vector<ClauseExchange *> &clauses) = 0;
+   virtual void addInitialClauses(const std::vector<simpleClause> &clauses, unsigned nbVars) = 0;
 
-   // /// Add a learned clause to the formula.
-   // virtual void importClause(ClauseExchange *clauses) = 0;
+   /// Load formula from a given dimacs file, return false if failed.
+   virtual void loadFormula(const char *filename) = 0;
 
-   // /// Add a list of learned clauses to the formula.
-   // virtual void importClauses(const std::vector<ClauseExchange *> &clauses) = 0;
-
-   // /// Get a list of learned clauses.
-   // virtual void exportClauses(std::vector<ClauseExchange *> &clauses) = 0;
-
-   /// Request the solver to produce more clauses.
-   virtual void increaseClauseProduction() = 0;
-
-   /// Request the solver to produce less clauses.
-   virtual void decreaseClauseProduction() = 0;
-
-   /// Get solver statistics.
-   virtual SolvingStatistics getStatistics() = 0;
+   /// Print solver statistics.
+   virtual void printStatistics()
+   {
+      LOGWARN("printStatistics not implemented");
+   }
 
    /// Return the model in case of SAT result.
    virtual std::vector<int> getModel() = 0;
 
+   /// @brief Prints the parameters set for a solver;
+   virtual void printParameters()
+   {
+      LOGWARN("printParameters not implemented");
+   };
+
    /// Native diversification.
-   virtual void diversify() = 0;
+   /// @param noise added for some radomness
+   virtual void diversify(std::mt19937 &rng_engine, std::uniform_int_distribution<int> &uniform_dist) = 0;
 
-   virtual void initshuffle(int id) = 0; // TODO: to be moved down to kissat only with a better abstraction
-
-   /// Return the final analysis in case of UNSAT result.
-   virtual std::vector<int> getFinalAnalysis() = 0;
-
-   virtual std::vector<int> getSatAssumptions() = 0;
-
-   virtual void setStrengthening(bool b){}; // needed for reducer using maple
-
-   // virtual bool testStrengthening() { return false; }
+   bool isInitialized() { return this->initialized; }
 
    /// Constructor.
-   SolverInterface(int solverId, SolverType solverType) : SharingEntity(solverId)
+   SolverInterface(SolverAlgorithmType algoType) : algoType(algoType)
    {
-      type = solverType;
-      nRefs = 1;
-   }
-
-   /// @brief The method that will call the right visit method of the SharingEntityVisitor v.
-   /// @param v The SharingEntityVisitor that defines what should be done on this solver
-   void accept(SharingEntityVisitor *v) override
-   {
-      v->visit(this);
    }
 
    /// Destructor.
@@ -180,9 +122,7 @@ public:
    }
 
    /// Type of this solver.
-   SolverType type;
+   SolverAlgorithmType algoType;
 
-protected:
-   /// @brief  Id of the solver in all the system (in distributed mode = nb_solvers * mpi_rank + id)
-   int gid;
+   std::atomic<bool> initialized = false;
 };

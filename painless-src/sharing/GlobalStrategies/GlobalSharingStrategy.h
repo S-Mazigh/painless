@@ -18,7 +18,7 @@ class GlobalSharingStrategy : public SharingStrategy
 public:
     /// @brief Constructors
     /// @param id the id the sharer using this strategy
-    GlobalSharingStrategy(int id, GlobalDatabase *g_base);
+    GlobalSharingStrategy(std::shared_ptr<GlobalDatabase> g_base);
 
     ///  Destructor
     virtual ~GlobalSharingStrategy();
@@ -27,23 +27,37 @@ public:
     /// @return number of millisecond to sleep
     ulong getSleepingTime() override;
 
+    virtual void joinProcess(int winnerRank, SatResult res, const std::vector<int> &model);
+
     /// @brief Function called to print the stats of the strategy
     void printStats() override;
 
     /// @brief Post constructor initialization done after MPI_Init()
     /// @return true if the initialization was done correctly, false otherwise
-    virtual bool initMpiVariables() = 0;
+    virtual bool initMpiVariables();
 
-    /// @brief To get the sharing entity of this strategy so it can be added to other sharing strategies
-    /// @return a pointer to the GlobalDatabase of this GlobalSharingStrategy
-    GlobalDatabase *getSharingEntity();
+    virtual bool doSharing();
 
 protected:
     /// @brief GlobalDatabase of the globalSharingStrategy
-    GlobalDatabase *globalDatabase;
+    std::shared_ptr<GlobalDatabase> globalDatabase;
 
     /// Sharing statistics.
     GlobalSharingStatistics gstats;
+
+    // Temporary
+    // ---------
+    /// @brief Bool to know if request to end was sent to the root
+    bool requests_sent;
+
+    /// @brief Requests of the non blocking receive end
+    std::vector<MPI_Request> recv_end_requests;
+
+    /// @brief Non root Isend request
+    MPI_Request send_end_request;
+
+    /// @brief Stores the result received from others
+    std::vector<SatResult> receivedFinalResultRoot;
 };
 
 #endif

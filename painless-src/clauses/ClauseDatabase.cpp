@@ -18,14 +18,11 @@
 // -----------------------------------------------------------------------------
 
 #include "clauses/ClauseDatabase.h"
-#include "clauses/ClauseManager.h"
 #include "clauses/ClauseExchange.h"
 #include "utils/Logger.h"
 
 #include <numeric>
-#include <string.h>
 
-using namespace std;
 
 ClauseDatabase::ClauseDatabase()
 {
@@ -40,11 +37,10 @@ ClauseDatabase::~ClauseDatabase()
 {
 }
 
-void ClauseDatabase::printTotalSizes()
+void ClauseDatabase::getTotalSizes(std::stringstream &strStream)
 {
-   uint size = totalSizes.size();
-   std::cout << "c ";
+   unsigned size = totalSizes.size();
    for (int i = 0; i < size; i++)
-      std::cout << "[" << i + 1 << "]:" << totalSizes[i] << ", ";
-   std::cout << " TOTAL: " << std::accumulate(totalSizes.begin(), totalSizes.end(), 0) << std::endl;
+      strStream<< "[" << i + 1 << "]:" << totalSizes[i] << ", ";
+   strStream << " TOTAL: " << std::accumulate(totalSizes.begin(), totalSizes.end(), 0) << std::endl;
 }

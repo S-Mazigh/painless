@@ -18,38 +18,55 @@
 // -----------------------------------------------------------------------------
 #include "SimpleSharing.h"
 
-#include "clauses/ClauseManager.h"
 #include "solvers/SolverFactory.h"
 #include "utils/Logger.h"
 #include "utils/Parameters.h"
 #include "painless.h"
 
-SimpleSharing::SimpleSharing(int id, std::vector<SharingEntity *> &producers, std::vector<SharingEntity *> &consumers) : LocalSharingStrategy(id, producers, consumers)
+SimpleSharing::SimpleSharing(std::vector<std::shared_ptr<SharingEntity>> &producers, std::vector<std::shared_ptr<SharingEntity>> &consumers) : LocalSharingStrategy(producers, consumers)
 {
-    // shr-lit * solver_nbr
+    this->sleepTime = Parameters::getIntParam("shr-sleep", 500000);
+
     this->literalPerRound = Parameters::getIntParam("shr-lit", 1500);
-    this->initPhase = true;
-    // Init database
+    /*TODO: make it a class attribute used in a callback*/
+    unsigned lbdLimit = Parameters::getIntParam("shr-initial-lbd", 2);
+
+    for (auto &producer : this->producers)
+    {
+        producer->setLbdLimit(lbdLimit);
+    }
+
     this->database = new ClauseDatabaseVector();
 
     if (Parameters::getBoolParam("dup"))
     {
         this->filter = new BloomFilter();
     }
+
+    LOGSTAT("[Simple] Producers: %d, Consumers: %d, Initial Lbd limit: %u, sleep time: %d, round before increase: %d", producers.size(), consumers.size(), lbdLimit, sleepTime);
 }
 
-SimpleSharing::SimpleSharing(int id, std::vector<SharingEntity *> &&producers, std::vector<SharingEntity *> &&consumers) : LocalSharingStrategy(id, producers, consumers)
+SimpleSharing::SimpleSharing(std::vector<std::shared_ptr<SharingEntity>> &&producers, std::vector<std::shared_ptr<SharingEntity>> &&consumers) : LocalSharingStrategy(producers, consumers)
 {
-    // shr-lit * solver_nbr
+    this->sleepTime = Parameters::getIntParam("shr-sleep", 500000);
+
     this->literalPerRound = Parameters::getIntParam("shr-lit", 1500);
-    this->initPhase = true;
-    // Init database
+    /*TODO: make it a class attribute used in a callback*/
+    unsigned lbdLimit = Parameters::getIntParam("shr-initial-lbd", 2);
+
+    for (auto &producer : this->producers)
+    {
+        producer->setLbdLimit(lbdLimit);
+    }
+
     this->database = new ClauseDatabaseVector();
 
     if (Parameters::getBoolParam("dup"))
     {
         this->filter = new BloomFilter();
     }
+
+    LOGSTAT("[Simple] Producers: %d, Consumers: %d, Initial Lbd limit: %u, sleep time: %d, round before increase: %d", producers.size(), consumers.size(), lbdLimit, sleepTime);
 }
 
 SimpleSharing::~SimpleSharing()
@@ -65,17 +82,39 @@ bool SimpleSharing::doSharing()
 {
     if (globalEnding)
         return true;
+
+    if (this->mustAddEntities)
+   {
+      LOGDEBUG1("[Hordesat] Adding new entities");
+      this->addLock.lock();
+      this->addSharingEntities(this->addProducers, this->producers);
+      this->addSharingEntities(this->addConsumers, this->consumers);
+      this->addLock.unlock();
+      this->mustAddEntities = false;
+   }
+
+   if (this->mustRemoveEntities)
+   {
+      LOGDEBUG1("[Hordesat] Removing old entities");
+      this->removeLock.lock();
+      this->removeSharingEntities(this->removeProducers, this->producers);
+      this->removeSharingEntities(this->removeConsumers, this->consumers);
+      this->removeLock.unlock();
+      this->mustRemoveEntities = false;
+   }
+    
     // 1- Fill the database using all the producers
     for (auto producer : producers)
     {
         unfiltered.clear();
         filtered.clear();
 
+        // TODO: a separate inline function for dup and no dup used to set a function pointer that will be used here
         if (Parameters::getBoolParam("dup"))
         {
             producer->exportClauses(unfiltered);
             // ref = 1
-            for (ClauseExchange *c : unfiltered)
+            for (std::shared_ptr<ClauseExchange> c : unfiltered)
             {
                 if (!filter->contains_or_insert(c->lits))
                 {
@@ -120,34 +159,28 @@ bool SimpleSharing::doSharing()
         }
     }
 
-    // release the clauses of this context
-    for (auto cls : filtered)
-    {
-        ClauseManager::releaseClause(cls);
-    }
-
-    LOG(1, "[SimpleSat %d] received cls %ld, shared cls %ld\n", idSharer, stats.receivedClauses, stats.sharedClauses);
+    LOG1("[SimpleShr] received cls %ld, shared cls %ld", stats.receivedClauses, stats.sharedClauses);
 
     if (globalEnding)
         return true;
     return false;
 }
 
-void SimpleSharing::visit(SolverInterface *solver)
+void SimpleSharing::visit(SolverCdclInterface *solver)
 {
-    LOG(3, "[SimpleSat %d] Visiting the solver %d\n", idSharer, solver->id);
+    LOG4("[SimpleShr] Visiting the solver %d", solver->id);
 }
 
 void SimpleSharing::visit(SharingEntity *sh_entity)
 {
-    LOG(3, "[SimpleSat %d] Visiting the sh_entity %d\n", idSharer, sh_entity->id);
+    LOG4("[SimpleShr] Visiting the sh_entity %d", sh_entity->id);
 }
 
 #ifndef NDIST
 void SimpleSharing::visit(GlobalDatabase *g_base)
 {
-    LOG(3, "[SimpleSat %d] Visiting the global database %d\n", idSharer, g_base->id);
+    LOG4("[SimpleShr] Visiting the global database %d", g_base->id);
 
-    LOG(1, "[SimpleSat %d] Added %d clauses imported from another process\n", idSharer, filtered.size());
+    LOG2("[SimpleShr] Added %d clauses imported from another process", filtered.size());
 }
 #endif

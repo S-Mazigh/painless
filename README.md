@@ -2,7 +2,6 @@ Painless: a Framework for Parallel SAT Solving
 ==============================================
 
 * Mazigh SAOUDI (mazigh.saoudi@epita.fr)
-* Souheib BAARIR (souheib.baarir@lip6.fr)
 
 
 Content
@@ -19,12 +18,21 @@ Content
       Contains wrapper for the sequential solvers.
    * utils/:
       Contains code for clauses management. But also useful data structures.
+   * preprocessors/:
+      Contains the imported preprocessings of [PRS](https://github.com/shaowei-cai-group/PRS-sc23/tree/PRS-sc23) and [SBVA](https://github.com/hgarrereyn/SBVA).
 
-* mapleCOMSPS/:
-   Contains the code of MapleCOMSPS from the SAT Competition 17 with some little changes.
+* solvers/:
+   * mapleCOMSPS/:
+      Contains the code of MapleCOMSPS from the SAT Competition 17 with some little changes.
 
-* kissat_mab/:
-   Contains the code of kissat_mab.
+   * kissat_mab/:
+      Contains the code of kissat_mab.
+   
+   * yalsat/:
+      Contains the code of [yalsat](https://github.com/arminbiere/yalsat).
+
+   * GASPIKISSAT/:
+      Contains the code of [GaspiKissat](https://github.com/sabrinesaouli/GASPIKISSAT).
 
 To compile the project
 ----------------------
@@ -34,7 +42,7 @@ To compile the project
 
 * In the main directory use 'make clean' to clean.
 
-
+<!--
 To run painless
 ---------------
 - All options have a default value except for the filename.
@@ -79,4 +87,4 @@ mpirun -n $nb_nodes xterm -hold -e ./painless -c=$nb_cpu  -solver="k" -t=$timeou
 ```sh
 ls $PWD/inputs_example/f/* > instances_f.txt
 ```
-
+-->

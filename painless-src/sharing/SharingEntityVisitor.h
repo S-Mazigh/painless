@@ -3,7 +3,7 @@
 // forward declarations
 class SharingEntity;
 class GlobalDatabase;
-class SolverInterface;
+class SolverCdclInterface;
 
 /// @brief SharingEntityVisitor interface implemented in SharingStrategy
 /// \ingroup sharing
@@ -23,5 +23,5 @@ public:
     /// @brief  Send only to the reducer and receive only from it
     /// @details Each producer fill its database, then a selection is done and sent only if the producer or the consumer is a reducer. In other words, no direct sharing between two classic solvers or between two reducers.
     /// @param solver the solver to interact with (visit)
-    virtual void visit(SolverInterface *solver) = 0;
+    virtual void visit(SolverCdclInterface *solver) = 0;
 };

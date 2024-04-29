@@ -20,7 +20,7 @@
 #pragma once
 
 #include "sharing/Sharer.h"
-#include "solvers/SolverInterface.hpp"
+#include "solvers/SolverCdclInterface.hpp"
 #include "working/WorkingStrategy.h"
 
 #include <atomic>
@@ -28,7 +28,7 @@
 #include <unistd.h>
 
 /// Is it the end of the search
-extern atomic<bool> globalEnding;
+extern std::atomic<bool> globalEnding;
 /// @brief  Mutex for timeout cond
 extern pthread_mutex_t mutexGlobalEnd;
 
@@ -47,6 +47,9 @@ extern int mpi_rank;
 /// @brief The number of mpi processes launched
 extern int world_size;
 
+/// @brief Mpi rank of the winner
+extern int mpi_winner;
+
 /// Size of the array of sharers
 extern int nSharers;
 
@@ -63,4 +66,4 @@ extern int nb_groups;
 extern int cpus;
 
 /// To check if painless is using distributed mode
-extern bool dist;
+extern std::atomic<bool> dist;

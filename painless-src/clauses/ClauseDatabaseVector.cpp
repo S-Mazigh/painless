@@ -18,14 +18,13 @@
 // -----------------------------------------------------------------------------
 
 #include "clauses/ClauseDatabaseVector.h"
-#include "clauses/ClauseManager.h"
 #include "clauses/ClauseExchange.h"
 #include "utils/Logger.h"
 
 #include <numeric>
 #include <string.h>
 
-using namespace std;
+
 
 ClauseDatabaseVector::ClauseDatabaseVector()
 {
@@ -39,19 +38,19 @@ ClauseDatabaseVector::~ClauseDatabaseVector()
 {
 }
 
-bool ClauseDatabaseVector::addClause(ClauseExchange *clause)
+bool ClauseDatabaseVector::addClause(std::shared_ptr<ClauseExchange> clause)
 {
    int clsSize = clause->size;
    
    if (maxClauseSize > 0 && clsSize > this->maxClauseSize)
    {
-      LOG(3, "Clause of size %d, will not be added to ClauseDatabaseVector of maxClauseSize = %d\n", clsSize, this->maxClauseSize);
+      LOG3( "Clause of size %d, will not be added to ClauseDatabaseVector of maxClauseSize = %d", clsSize, this->maxClauseSize);
       return false;
    }
 
    while (clauses.size() < clsSize)
    {
-      vector<ClauseExchange *> newVector;
+      std::vector<std::shared_ptr<ClauseExchange>> newVector;
       clauses.push_back(newVector);
       totalSizes.push_back(0);
    }
@@ -60,7 +59,6 @@ bool ClauseDatabaseVector::addClause(ClauseExchange *clause)
    {
       clauses[clsSize - 1].push_back(clause);
       totalSizes[clsSize - 1]++;
-      ClauseManager::increaseClause(clause);
       return true;
    }
    else
@@ -69,7 +67,7 @@ bool ClauseDatabaseVector::addClause(ClauseExchange *clause)
    }
 }
 
-int ClauseDatabaseVector::giveSelection(vector<ClauseExchange *> &selectedCls,
+int ClauseDatabaseVector::giveSelection(std::vector<std::shared_ptr<ClauseExchange> > &selectedCls,
                                   unsigned totalSize, int *selectCount)
 {
    int used = 0;
@@ -116,7 +114,7 @@ int ClauseDatabaseVector::giveSelection(vector<ClauseExchange *> &selectedCls,
    return used;
 }
 
-int ClauseDatabaseVector::giveSelection(vector<ClauseExchange *> &selectedCls,
+int ClauseDatabaseVector::giveSelection(std::vector<std::shared_ptr<ClauseExchange> > &selectedCls,
                                   unsigned totalSize)
 {
    int used = 0;
@@ -158,13 +156,13 @@ int ClauseDatabaseVector::giveSelection(vector<ClauseExchange *> &selectedCls,
    return used;
 }
 
-bool ClauseDatabaseVector::giveOneClause(ClauseExchange **cls)
+bool ClauseDatabaseVector::giveOneClause(std::shared_ptr<ClauseExchange> &cls)
 {
    for (auto &clauseVector : clauses)
    {
       if (clauseVector.size() > 0)
       {
-         *cls = clauseVector.back();
+         cls = clauseVector.back();
          clauseVector.pop_back();
          return true;
       }
@@ -172,7 +170,7 @@ bool ClauseDatabaseVector::giveOneClause(ClauseExchange **cls)
    return false;
 }
 
-void ClauseDatabaseVector::getClauses(vector<ClauseExchange *> &v_cls)
+void ClauseDatabaseVector::getClauses(std::vector<std::shared_ptr<ClauseExchange> > &v_cls)
 {
    for (auto &clauseVector : clauses)
    {
@@ -190,9 +188,9 @@ void ClauseDatabaseVector::getSizes(std::vector<int> &nbClsPerSize)
    }
 }
 
-uint ClauseDatabaseVector::getSize()
+unsigned ClauseDatabaseVector::getSize()
 {
-   uint size = 0;
+   unsigned size = 0;
    for (auto &clauseVector : clauses)
    {
       // index i stores number of clauses of size i+1
@@ -205,10 +203,10 @@ void ClauseDatabaseVector::deleteClauses(int clsSize)
 {
    if (clsSize <= 0)
    {
-      LOG(2, "Deletion cancelled, received illegal clauseSize : %d\n", clsSize);
+      LOGERROR( "Deletion cancelled, received illegal clauseSize : %d", clsSize);
       return;
    }
-   uint dbSize = clauses.size();
+   unsigned dbSize = clauses.size();
    for (int i = clsSize - 1; i < dbSize; i++)
    {
       clauses[i].clear();

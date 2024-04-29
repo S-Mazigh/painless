@@ -17,7 +17,6 @@
 // this program.  If not, see <http://www.gnu.org/licenses/>.
 // -----------------------------------------------------------------------------
 
-#include "ClauseManager.h"
 #include "ClauseBufferAlpha.h"
 
 #include <iostream>
@@ -42,7 +41,7 @@ ClauseBufferAlpha::ClauseBufferAlpha(ClauseBufferAlpha &otherbuff)
    buffer.size = 0;
 
    // Copy
-   std::vector<ClauseExchange *> tmp;
+   std::vector<std::shared_ptr<ClauseExchange>> tmp;
    otherbuff.readClauses(tmp); // reads only without consuming
    this->addClauses(tmp);
 }
@@ -62,7 +61,7 @@ ClauseBufferAlpha::ClauseBufferAlpha(ClauseBufferAlpha &&otherbuff)
    buffer.size = 0;
 
    // Cut
-   std::vector<ClauseExchange *> tmp;
+   std::vector<std::shared_ptr<ClauseExchange>> tmp;
    otherbuff.getClauses(tmp); // get with consuming
    this->addClauses(tmp);
 }
@@ -74,7 +73,7 @@ ClauseBufferAlpha::~ClauseBufferAlpha()
 //-------------------------------------------------
 //  Add clause(s)
 //-------------------------------------------------
-void ClauseBufferAlpha::addClause(ClauseExchange *clause)
+void ClauseBufferAlpha::addClause(std::shared_ptr<ClauseExchange> clause)
 {
    ListElement *tail, *next;
    ListElement *node = new ListElement(clause);
@@ -107,7 +106,7 @@ void ClauseBufferAlpha::addClause(ClauseExchange *clause)
    buffer.tail.compare_exchange_strong(tail, node);
 }
 
-void ClauseBufferAlpha::addClauses(const vector<ClauseExchange *> &clauses)
+void ClauseBufferAlpha::addClauses(const std::vector<std::shared_ptr<ClauseExchange>> &clauses)
 {
    int clausesSize = clauses.size();
    for (int i = 0; i < clausesSize; i++)
@@ -119,7 +118,7 @@ void ClauseBufferAlpha::addClauses(const vector<ClauseExchange *> &clauses)
 //-------------------------------------------------
 //  Get/Read clause(s)
 //-------------------------------------------------
-bool ClauseBufferAlpha::getClause(ClauseExchange **clause)
+bool ClauseBufferAlpha::getClause(std::shared_ptr<ClauseExchange> &clause)
 {
    ListElement *head, *tail, *next;
 
@@ -142,7 +141,7 @@ bool ClauseBufferAlpha::getClause(ClauseExchange **clause)
          }
          else
          {
-            *clause = next->clause; // return next pour eviter de retourner le NULL du début et pour avoir une chaine vide si head == tail
+            clause = next->clause; // return next pour eviter de retourner le NULL du début et pour avoir une chaine vide si head == tail
 
             if (buffer.head.compare_exchange_strong(head, next)) // si deux thread arrivent ici, head ne sera changer qu'une seule fois.
             {
@@ -159,21 +158,21 @@ bool ClauseBufferAlpha::getClause(ClauseExchange **clause)
    return true;
 }
 
-void ClauseBufferAlpha::getClauses(vector<ClauseExchange *> &clauses)
+void ClauseBufferAlpha::getClauses(std::vector<std::shared_ptr<ClauseExchange>>  &clauses)
 {
-   ClauseExchange *cls;
+   std::shared_ptr<ClauseExchange> cls;
 
    int nClauses = size();
    int nClausesGet = 0;
 
-   while (getClause(&cls) && nClausesGet < nClauses)
+   while (getClause(cls) && nClausesGet < nClauses)
    {
       clauses.push_back(cls);
       nClausesGet++;
    }
 }
 
-bool ClauseBufferAlpha::readClause(ClauseExchange **clause)
+bool ClauseBufferAlpha::readClause(std::shared_ptr<ClauseExchange> &clause)
 {
    ListElement *head, *tail, *next;
 
@@ -195,8 +194,7 @@ bool ClauseBufferAlpha::readClause(ClauseExchange **clause)
          }
          else
          {
-            *clause = next->clause;
-            ClauseManager::increaseClause(*clause);
+            clause = next->clause;
          }
       }
    }
@@ -206,14 +204,14 @@ bool ClauseBufferAlpha::readClause(ClauseExchange **clause)
    return true;
 }
 
-void ClauseBufferAlpha::readClauses(std::vector<ClauseExchange *> &clauses)
+void ClauseBufferAlpha::readClauses(std::vector<std::shared_ptr<ClauseExchange>> &clauses)
 {
-   ClauseExchange *cls;
+   std::shared_ptr<ClauseExchange> cls;
 
    int nClauses = size();
    int nClausesGet = 0;
 
-   while (readClause(&cls) && nClausesGet < nClauses) // s'arrete si tout est lu ou si liste est vidée par un autre thread
+   while (readClause(cls) && nClausesGet < nClauses) // s'arrete si tout est lu ou si liste est vidée par un autre thread
    {
       clauses.push_back(cls);
       nClausesGet++;

@@ -32,18 +32,22 @@ class SimpleSharing : public LocalSharingStrategy
 {
 public:
     /// Constructors
-    SimpleSharing(int id, std::vector<SharingEntity *> &producers, std::vector<SharingEntity *> &consumers);
-    SimpleSharing(int id, std::vector<SharingEntity *> &&producers, std::vector<SharingEntity *> &&consumers);
+    SimpleSharing(std::vector<std::shared_ptr<SharingEntity>> &producers, std::vector<std::shared_ptr<SharingEntity>> &consumers);
+    SimpleSharing(std::vector<std::shared_ptr<SharingEntity>> &&producers, std::vector<std::shared_ptr<SharingEntity>> &&consumers);
 
     /// Destructor.
     ~SimpleSharing();
+
+    ulong getSleepingTime() override {
+      return this->sleepTime;
+   }
 
     /// @brief This method shared clauses from the producers to the consumers. It does only one selection on the common database.
     bool doSharing() override;
 
     /// @brief  A solver adds its clauses to the common database and check if it needs to increase or lessen the number of generated clauses.
     /// @param solver the solver to interact with (visit)
-    void visit(SolverInterface *solver) override;
+    void visit(SolverCdclInterface *solver) override;
 
     /// @brief A sharing entity just adds its clauses to the common database.
     /// @param sh_entity the sharing entity to interact with (visit)
@@ -61,17 +65,16 @@ public:
 protected:
     /// Number of shared literals per round.
     int literalPerRound;
-
-    /// Are we in init phase.
-    bool initPhase;
-
+    
     /// Database used to store the clauses.
     ClauseDatabaseVector *database;
 
     /// Used to manipulate clauses.
-    std::vector<ClauseExchange *> filtered;
-    std::vector<ClauseExchange *> unfiltered;
+    std::vector<std::shared_ptr<ClauseExchange>> filtered;
+    std::vector<std::shared_ptr<ClauseExchange>> unfiltered;
 
     /// @brief Filter used if -dup mode enabled
     BloomFilter *filter = nullptr;
+
+    ulong sleepTime;
 };

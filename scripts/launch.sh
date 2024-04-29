@@ -2,21 +2,22 @@
 
 script_dir=$(dirname $0)
 
-echo $script_dir
+# echo $script_dir
 
 source $script_dir/myLibrary.sh
 
 # themes
 colored=1
+success_theme="\e[1;42;97m"
 error_theme="\e[1;101;97m"
 info_theme="\e[1;44m"
 reset_theme="\e[0m"
 log_theme="\033[1;34m"
 
-painless_home=$(pwd)
+painless_home=$script_dir
 
 if [ $# -lt 1 ]; then
-    echo "Please enter the file with path to the formulas"
+    echo "Please enter the file with path to the formulae"
     exit 1
 fi
 
@@ -29,14 +30,6 @@ fi
 
 # info variables
 nb_clauses=0
-hostfile="$script_dir/hostfile"
-
-if [ ! -f $hostfile ]; then
-    # default_hostfile="localhost slots=$nb_physical_cores"
-    echo -e "$error_theme ./hostfile wasn't found, please create this file in the same directory as this script $reset_theme"
-    # echo $default_hostfile > $hostfile
-    exit 1
-fi
 
 parameters="$script_dir/parameters.sh"
 if [ ! -f $parameters ]; then
@@ -44,17 +37,14 @@ if [ ! -f $parameters ]; then
     exit 1
 fi
 
-
 source $parameters
 
-if [ $shr_sleep -le 0 ]; then
-    shr_sleep=500000
+if [ $gstrat -ge 0 ] && [ ! -f $hostfile ]; then
+    # default_hostfile="localhost slots=$nb_physical_cores"
+    echo -e "$error_theme hostfile variable '$hostfile' doesn't link to a file $reset_theme"
+    # echo $default_hostfile > $hostfile
+    exit 1
 fi
-
-
-
-# nb_nodes=$(ls $hostfile | wc)
-
 
 # results
 total_time_spent=0
@@ -77,12 +67,13 @@ if [ ! -d "./outputs" ]; then
 fi
 
 times_file=./outputs/times.csv
+
 if [ ! -f $times_file ]; then
     echo "bin-param,time,myPAR2,nbSAT,nbUNSAT,nbResolved,nbTIMEOUT,nbUNKNOWN,nbUnresolved" >$times_file
 fi
 
 # Per configuration metrics
-instance_name="L${lstrat}_G${gstrat}_B${nb_bloom_gstrat}${dup}${dist}-$(date +"%d_%m_%Y-%H_%M")"
+instance_name="L${lstrat}_G${gstrat}${dup}${dist}-$(date +"%d_%m_%Y-%H_%M")_$2"
 metric_dir="./outputs/metric_$instance_name"
 if [ ! -d $metric_dir ]; then mkdir $metric_dir; fi
 
@@ -108,23 +99,24 @@ if [ ! -f $globalSharersInfoFile ]; then
 fi
 
 if [ ! -f $timesPerIntance ]; then
-    echo "instance,time,myPar2,result,winnerFamily" >$timesPerIntance
+    echo "instance,time,myPar2,result,winnerFamily,winnerType,memoryUsed" >$timesPerIntance
 fi
 
 cmd="$script_dir/../painless"
-args="-v=$verbose -c=$nb_solvers -solver=$solver -t=$timeout -shr-strat=$lstrat -shr-sleep=$shr_sleep $simp $flags"
+args="-v=$verbose -c=$nb_solvers -solver=$solver -t=$timeout -shr-strat=$lstrat -shr-sleep=$shr_sleep $simp $flags -sbva-timeout=$sbva_timeout"
 
 if [ $gstrat -ge 0 ]; then
     # bind-to none to not have all the threads binded to one core as it is when nb process <= 2
-    # map $nb_procs_per_node processes to each node, and each process is bound to $nb_physical_cores hardware threads
+    # map $nb_procs processes to each node, and each process is bound to $nb_solvers hardware threads
     cmd=$(echo -n "mpirun --hostfile $hostfile --bind-to hwthread --map-by ppr:$nb_procs_per_node:node:pe=$nb_physical_cores $cmd")
     args=$(echo -n "$args -gshr-strat=$gstrat -dist")
 fi
 
 echo $cmd $args >$metric_dir/info_${gstrat}_${lstrat}.txt
 
-title_in_center "Using Command: ${info_theme}$cmd $args${reset_theme} on input file ${info_theme}$1/${reset_theme}"
+title_in_center "Using Command: ${info_theme}$cmd $args${reset_theme} on input file ${info_theme}$input_files${reset_theme}"
 
+# all_start_time=$(echo "$(date +%s) + $(date +%N) / 1000000000" | bc -l)
 
 for f in $(cat ${input_files}); do
     if [ -f "$f" ]; then
@@ -132,8 +124,8 @@ for f in $(cat ${input_files}); do
         echo -e "${info_theme}Using file $f${reset_theme}"
 
         # Getting info from the cnf file
-        solution=$(awk 'match($0, /^c NOTE: ([a-zA-z ]*(sat|Sat|SAT)[a-zA-z ]+)/, cap) {print cap[1]}' $f)
-        nb_clauses=$(awk 'match($0, /^p cnf [0-9]+ ([0-9]+)/, cap) {print cap[1]}' $f)
+        solution=$(head $f | awk 'match($0, /^c NOTE: ([a-zA-z ]*(sat|Sat|SAT)[a-zA-z ]+)/, cap) {print cap[1]}')
+        nb_clauses=$(head $f | awk 'match($0, /^p cnf [0-9]+ ([0-9]+)/, cap) {print cap[1]}')
 
         echo -e "${info_theme}Nb Clause = ${nb_clauses}${reset_theme}"
 
@@ -143,12 +135,20 @@ for f in $(cat ${input_files}); do
         instance=${instance%.*} # remove the .cnf from file name
         output_file="${metric_dir}/logs/log_${instance}.txt"
 
+        # Execute command
+        start_time=$(echo "$(date +%s) + $(date +%N) / 1000000000" | bc -l)
+
         eval $cmd $args $f >$output_file
+        end_time=$(echo "$(date +%s) + $(date +%N) / 1000000000" | bc -l)
 
         # Capture solution answered
-        results=($(awk 'match($0, /s ([A-Z]+)/, cap) {print cap[1]}' $output_file))
+        results=($(awk 'match($0, /^s ([A-Z]+)$/, cap) {print cap[1]}' $output_file))
+        memory_used=($(awk 'match($0, /Memory\s*used\s*([0-9.]+)/, cap) {print cap[1]}' $output_file))
         time_spent=($(awk 'match($0, /Resolution\s*time:\s*([0-9]+.?[0-9]*)\s*s/, cap) {print cap[1]}' $output_file))
+        winner_family=($(awk 'match($0, /The winner is.*of family\s*([A-Z_]+)\s*.*$/, cap) {print cap[1]}' $output_file))
+        winner_type=($(awk 'match($0, /The winner is.*of type:\s*([A-Z_]+)\s*.*$/, cap) {print cap [1]}' $output_file))
 
+        time_spent_bash=$(echo $end_time - $start_time | bc -l)
         case ${results[0]} in
         "UNKNOWN")
             echo -e "${error_theme} Process returned UNKNOWN!!! ${reset_theme}"
@@ -163,24 +163,49 @@ for f in $(cat ${input_files}); do
         "SATISFIABLE")
             mypar2=$time_spent
             ((nbSAT++))
+            output=$($script_dir/SAT "$f" "$output_file" 2>&1)
+            last_line=$(echo "$output" | tail -n 1)
+            if [ "$last_line" = "11" ]; then
+                # Solution is correct
+                echo -e "${success_theme} SAT solution is correct. ${reset_theme}"
+            elif [ "$last_line" = "-1" ]; then
+                # Solution is wrong
+                echo -e "${error_theme} SAT solution is wrong. ${reset_theme}"
+                results[0]="WRONG_SATISFIABLE"
+            else
+                # Unknown output
+                echo -e "${error_theme} SAT returned an unexpected value. ${reset_theme}"
+            fi
             ;;
         "UNSATISFIABLE")
             mypar2=$time_spent
             ((nbUNSAT++))
             ;;
         *)
-            echo -e "${reset_theme}"
             continue
             ;;
         esac
 
-        echo -e "${log_theme}\t bash captured results: ${results[0]}${reset_theme}" #${results[@]} to debug
+        echo -e "${log_theme}\t bash captured results: ${results[0]}${reset_theme}"
         echo -e "${log_theme}\t bash captured time: ${time_spent}${reset_theme}"
-        
-        echo "$instance,$time_spent,$mypar2,${results[0]}" >>$timesPerIntance
+        echo -e "${log_theme}\t bash captured memory use: ${memory_used} Ko ${reset_theme}"
+        echo -e "${log_theme}\t bash captured family: ${winner_family}${reset_theme}"
+        echo -e "${log_theme}\t bash captured type: ${winner_type}${reset_theme}"
+
+        echo -e "${log_theme}\t Time spent by bash: $time_spent_bash s${reset_theme}"
+        # echo -e "${log_theme}\tt myPar2 by bash: $mypar2 s${reset_theme}"
+
+        # echo -e "${log_theme}\ts Solution from input file: $solution${reset_theme}"
+
+        # offset_time=$(echo $end_time - $all_start_time | bc -l)
+
+        echo "$instance,$time_spent_bash,$mypar2,${results[0]},$winner_family,$winner_type,$memory_used" >>$timesPerIntance
 
         total_time_spent=$(echo $total_time_spent+$time_spent | bc -l)
         total_mypar2=$(echo $total_mypar2+$mypar2 | bc -l)
+
+        # Extract sharers informations from the output_file
+        # perl .utils/extract_info.pl $output_file $localSharersInfoFile $globalSharersInfoFile $instance
 
         echo -e "\n"
 

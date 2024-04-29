@@ -32,8 +32,8 @@ class HordeSatSharing : public LocalSharingStrategy
 {
 public:
    /// Constructors
-   HordeSatSharing(int id, std::vector<SharingEntity *> &producers, std::vector<SharingEntity *> &consumers);
-   HordeSatSharing(int id, std::vector<SharingEntity *> &&producers, std::vector<SharingEntity *> &&consumers);
+   HordeSatSharing(std::vector<std::shared_ptr<SharingEntity>> &producers, std::vector<std::shared_ptr<SharingEntity>> &consumers);
+   HordeSatSharing(std::vector<std::shared_ptr<SharingEntity>> &&producers, std::vector<std::shared_ptr<SharingEntity>> &&consumers);
 
    /// Destructor.
    ~HordeSatSharing();
@@ -41,9 +41,13 @@ public:
    /// This method shared clauses from the producers to the consumers.
    bool doSharing() override;
 
+   ulong getSleepingTime() override {
+      return this->sleepTime;
+   }
+
    /// @brief  Each producer fill its database, then a selection is done which is sent to all the consumers.
    /// @param solver the solver to interact with (visit)
-   void visit(SolverInterface *solver) override;
+   void visit(SolverCdclInterface *solver) override;
 
    /// @brief The default behavior of any sharingEntity if this strategy
    /// @param sh_entity the sharing entityity to interact with (visit)
@@ -61,8 +65,8 @@ protected:
    /// Number of shared literals per round.
    int literalPerRound;
 
-   /// Are we in init phase.
-   bool initPhase;
+   // /// Are we in init phase. (disabled)
+   // bool initPhase;
 
    /// Number of round before forcing an increase in production
    int roundBeforeIncrease;
@@ -71,13 +75,16 @@ protected:
    int round;
 
    /// Databse used to store the clauses.
-   unordered_map<int, ClauseDatabaseVector *> databases;
-   unordered_map<int, ClauseDatabaseVector *> unfiltered_databases;
+   std::unordered_map<int, ClauseDatabaseVector *> databases;
+   std::unordered_map<int, ClauseDatabaseVector *> unfiltered_databases;
 
    /// Used to manipulate clauses.
-   std::vector<ClauseExchange *> filtered;
-   std::vector<ClauseExchange *> unfiltered;
+   std::vector<std::shared_ptr<ClauseExchange>> filtered;
+   std::vector<std::shared_ptr<ClauseExchange>> unfiltered;
 
    /// @brief Filter used if -dup mode enabled
    BloomFilter *filter = nullptr;
+
+   /// @brief To dynamically update the sleepTime of the sharer
+   ulong sleepTime;
 };

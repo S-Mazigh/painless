@@ -6,7 +6,7 @@ ulong SharingStrategy::getSleepingTime()
     return Parameters::getIntParam("shr-sleep", 500000);
 }
 
-int SharingStrategy::getLiteralsCount(std::vector<ClauseExchange *> clauses)
+int SharingStrategy::getLiteralsCount(std::vector<std::shared_ptr<ClauseExchange>> clauses)
 {
     int count = 0;
     for (auto clause : clauses)

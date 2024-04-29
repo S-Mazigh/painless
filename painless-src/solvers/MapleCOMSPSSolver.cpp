@@ -18,14 +18,13 @@
 // -----------------------------------------------------------------------------
 
 // MapleCOMSPS includes
-#include <mapleCOMSPS/utils/System.h>
-#include <mapleCOMSPS/core/Dimacs.h>
-#include <mapleCOMSPS/simp/SimpSolver.h>
+#include <mapleCOMSPS/mapleCOMSPS/utils/System.h>
+#include <mapleCOMSPS/mapleCOMSPS/core/Dimacs.h>
+#include <mapleCOMSPS/mapleCOMSPS/simp/SimpSolver.h>
 
 #include "utils/Logger.h"
 #include "utils/System.h"
 #include "utils/Parameters.h"
-#include "clauses/ClauseManager.h"
 #include "solvers/MapleCOMSPSSolver.h"
 
 using namespace MapleCOMSPS;
@@ -35,7 +34,7 @@ using namespace MapleCOMSPS;
 
 #define INT_LIT(lit) sign(lit) ? -(var(lit) + 1) : (var(lit) + 1)
 
-static void makeMiniVec(ClauseExchange *cls, vec<Lit> &mcls)
+static void makeMiniVec(std::shared_ptr<ClauseExchange> cls, vec<Lit> &mcls)
 {
    for (size_t i = 0; i < cls->size; i++)
    {
@@ -50,7 +49,7 @@ void cbkMapleCOMSPSExportClause(void *issuer, unsigned lbd, vec<Lit> &cls)
    if (lbd > mp->lbdLimit)
       return;
 
-   ClauseExchange *ncls = ClauseManager::allocClause(cls.size());
+   std::shared_ptr<ClauseExchange> ncls(new ClauseExchange(cls.size()));
 
    for (int i = 0; i < cls.size(); i++)
    {
@@ -69,14 +68,12 @@ Lit cbkMapleCOMSPSImportUnit(void *issuer)
 
    Lit l = lit_Undef;
 
-   ClauseExchange *cls = NULL;
+   std::shared_ptr<ClauseExchange> cls;
 
-   if (mp->unitsToImport.getClause(&cls) == false)
+   if (mp->unitsToImport.getClause(cls) == false)
       return l;
 
    l = MINI_LIT(cls->lits[0]);
-
-   ClauseManager::releaseClause(cls);
 
    return l;
 }
@@ -85,23 +82,21 @@ bool cbkMapleCOMSPSImportClause(void *issuer, unsigned *lbd, vec<Lit> &mcls)
 {
    MapleCOMSPSSolver *mp = (MapleCOMSPSSolver *)issuer;
 
-   ClauseExchange *cls = NULL;
+   std::shared_ptr<ClauseExchange> cls;
 
-   if (mp->clausesToImport.getClause(&cls) == false)
+   if (mp->clausesToImport.getClause(cls) == false)
       return false;
 
    makeMiniVec(cls, mcls);
 
    *lbd = cls->lbd;
 
-   ClauseManager::releaseClause(cls);
-
    return true;
 }
 
-MapleCOMSPSSolver::MapleCOMSPSSolver(int id) : SolverInterface(id, MAPLE)
+MapleCOMSPSSolver::MapleCOMSPSSolver(int id) : SolverCdclInterface(id, MAPLE)
 {
-   lbdLimit = Parameters::getIntParam("lbd-limit", 2);
+   lbdLimit = 0;
 
    solver = new SimpSolver();
 
@@ -111,9 +106,9 @@ MapleCOMSPSSolver::MapleCOMSPSSolver(int id) : SolverInterface(id, MAPLE)
    solver->issuer = this;
 }
 
-MapleCOMSPSSolver::MapleCOMSPSSolver(const MapleCOMSPSSolver &other, int id) : SolverInterface(id, MAPLE)
+MapleCOMSPSSolver::MapleCOMSPSSolver(const MapleCOMSPSSolver &other, int id) : SolverCdclInterface(id, MAPLE)
 {
-   lbdLimit = Parameters::getIntParam("lbd-limit", 2);
+   lbdLimit = 0;
 
    solver = new SimpSolver(*(other.solver));
 
@@ -128,16 +123,16 @@ MapleCOMSPSSolver::~MapleCOMSPSSolver()
    delete solver;
 }
 
-bool MapleCOMSPSSolver::loadFormula(const char *filename)
-{
-   gzFile in = gzopen(filename, "rb");
+// void MapleCOMSPSSolver::loadFormula(const char *filename)
+// {
+//    gzFile in = gzopen(filename, "rb");
 
-   parse_DIMACS(in, *solver);
+//    parse_DIMACS(in, *solver);
 
-   gzclose(in);
+//    gzclose(in);
 
-   return true;
-}
+//    return true;
+// }
 
 // Get the number of variables of the formula
 int MapleCOMSPSSolver::getVariablesCount()
@@ -152,7 +147,7 @@ int MapleCOMSPSSolver::getDivisionVariable()
 }
 
 // Set initial phase for a given variable
-void MapleCOMSPSSolver::setPhase(const int var, const bool phase)
+void MapleCOMSPSSolver::setPhase(const unsigned var, const bool phase)
 {
    solver->setPolarity(var - 1, phase ? true : false);
 }
@@ -178,7 +173,7 @@ void MapleCOMSPSSolver::unsetSolverInterrupt()
 }
 
 // Diversify the solver
-void MapleCOMSPSSolver::diversify()
+void MapleCOMSPSSolver::diversify(std::mt19937 &rng_engine, std::uniform_int_distribution<int> &uniform_dist)
 {
    if (id == ID_XOR)
    {
@@ -211,11 +206,11 @@ void MapleCOMSPSSolver::diversify()
 // Solve the formula with a given set of assumptions
 // return 10 for SAT, 20 for UNSAT, 0 for UNKNOWN
 SatResult
-MapleCOMSPSSolver::solve(const vector<int> &cube)
+MapleCOMSPSSolver::solve(const std::vector<int> &cube)
 {
    unsetSolverInterrupt();
 
-   vector<ClauseExchange *> tmp;
+   std::vector<std::shared_ptr<ClauseExchange>> tmp;
 
    tmp.clear();
    clausesToAdd.getClauses(tmp);
@@ -225,11 +220,9 @@ MapleCOMSPSSolver::solve(const vector<int> &cube)
       vec<Lit> mcls;
       makeMiniVec(tmp[ind], mcls);
 
-      ClauseManager::releaseClause(tmp[ind]);
-
       if (solver->addClause(mcls) == false)
       {
-         printf("c unsat when adding cls\n");
+         LOG(" unsat when adding cls");
          return UNSAT;
       }
    }
@@ -251,14 +244,21 @@ MapleCOMSPSSolver::solve(const vector<int> &cube)
    return UNKNOWN;
 }
 
-void MapleCOMSPSSolver::addClause(ClauseExchange *clause)
+void MapleCOMSPSSolver::loadFormula(const char *filename)
+{
+   gzFile in = gzopen(filename, "rb");
+   parse_DIMACS(in, *solver);
+   gzclose(in);
+}
+
+void MapleCOMSPSSolver::addClause(std::shared_ptr<ClauseExchange> clause)
 {
    clausesToAdd.addClause(clause);
 
    setSolverInterrupt();
 }
 
-bool MapleCOMSPSSolver::importClause(ClauseExchange *clause)
+bool MapleCOMSPSSolver::importClause(std::shared_ptr<ClauseExchange> clause)
 {
    if (clause->size == 1)
    {
@@ -268,26 +268,25 @@ bool MapleCOMSPSSolver::importClause(ClauseExchange *clause)
    {
       clausesToImport.addClause(clause);
    }
-   ClauseManager::increaseClause(clause);
    return true;
 }
 
-void MapleCOMSPSSolver::addClauses(const vector<ClauseExchange *> &clauses)
+void MapleCOMSPSSolver::addClauses(const std::vector<std::shared_ptr<ClauseExchange>> &clauses)
 {
    clausesToAdd.addClauses(clauses);
 
    setSolverInterrupt();
 }
 
-void MapleCOMSPSSolver::addInitialClauses(const vector<ClauseExchange *> &clauses)
+void MapleCOMSPSSolver::addInitialClauses(const std::vector<simpleClause> &clauses, unsigned nbVars)
 {
    for (size_t ind = 0; ind < clauses.size(); ind++)
    {
       vec<Lit> mcls;
 
-      for (size_t i = 0; i < clauses[ind]->size; i++)
+      for (size_t i = 0; i < clauses[ind].size(); i++)
       {
-         int lit = clauses[ind]->lits[i];
+         int lit = clauses[ind][i];
          int var = abs(lit);
 
          while (solver->nVars() < var)
@@ -300,12 +299,14 @@ void MapleCOMSPSSolver::addInitialClauses(const vector<ClauseExchange *> &clause
 
       if (solver->addClause(mcls) == false)
       {
-         printf("c unsat when adding initial cls\n");
+         LOG(" unsat when adding initial cls");
       }
    }
+
+   LOG2("The Maple Solver %d loaded all the clauses", this->id);
 }
 
-void MapleCOMSPSSolver::importClauses(const vector<ClauseExchange *> &clauses)
+void MapleCOMSPSSolver::importClauses(const std::vector<std::shared_ptr<ClauseExchange>> &clauses)
 {
    for (auto cls : clauses)
    {
@@ -313,7 +314,7 @@ void MapleCOMSPSSolver::importClauses(const vector<ClauseExchange *> &clauses)
    }
 }
 
-void MapleCOMSPSSolver::exportClauses(vector<ClauseExchange *> &clauses)
+void MapleCOMSPSSolver::exportClauses(std::vector<std::shared_ptr<ClauseExchange>> &clauses)
 {
    clausesToExport.getClauses(clauses);
 }
@@ -331,18 +332,15 @@ void MapleCOMSPSSolver::decreaseClauseProduction()
    }
 }
 
-SolvingStatistics
-MapleCOMSPSSolver::getStatistics()
+void MapleCOMSPSSolver::printStatistics()
 {
-   SolvingStatistics stats;
-
-   stats.conflicts = solver->conflicts;
-   stats.propagations = solver->propagations;
-   stats.restarts = solver->starts;
-   stats.decisions = solver->decisions;
-   stats.memPeak = memUsedPeak();
-
-   return stats;
+   LOGSTAT("Solver %d:\n\t\
+   * Conflicts: %lu\n\t\
+   * Propapgations: %lu\n\t\
+   * Restars: %lu\n\t\
+   * Decisions: %lu\n\t\
+   * Maximum memory: %f Ko",
+           this->id, solver->conflicts, solver->propagations, solver->starts, solver->decisions, memUsedPeak());
 }
 
 std::vector<int>
@@ -362,10 +360,10 @@ MapleCOMSPSSolver::getModel()
    return model;
 }
 
-vector<int>
+std::vector<int>
 MapleCOMSPSSolver::getFinalAnalysis()
 {
-   vector<int> outCls;
+   std::vector<int> outCls;
 
    for (int i = 0; i < solver->conflict.size(); i++)
    {
@@ -375,10 +373,10 @@ MapleCOMSPSSolver::getFinalAnalysis()
    return outCls;
 }
 
-vector<int>
+std::vector<int>
 MapleCOMSPSSolver::getSatAssumptions()
 {
-   vector<int> outCls;
+   std::vector<int> outCls;
    vec<Lit> lits;
    solver->getAssumptions(lits);
    for (int i = 0; i < lits.size(); i++)
@@ -391,19 +389,4 @@ MapleCOMSPSSolver::getSatAssumptions()
 void MapleCOMSPSSolver::setStrengthening(bool b)
 {
    solver->setStrengthening(b);
-}
-
-void MapleCOMSPSSolver::addOriginClauses(simplify *S)
-{
-   vector<ClauseExchange *> clauses;
-   for (int i = 1; i <= S->clauses; i++)
-   {
-      ClauseExchange *c = ClauseManager::allocClause(S->clause[i].size());
-      for (int j = 0; j < c->size; j++)
-      {
-         c->lits[j] = S->clause[i][j];
-      }
-      clauses.push_back(c);
-   }
-   addInitialClauses(clauses);
 }

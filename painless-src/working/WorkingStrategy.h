@@ -22,9 +22,8 @@
 #include "../solvers/SolverInterface.hpp"
 
 #include <vector>
-using namespace std;
 
-extern atomic<bool> globalEnding;
+extern std::atomic<bool> globalEnding;
 
 extern SatResult finalResult;
 
@@ -43,12 +42,6 @@ public:
    virtual void join(WorkingStrategy *winner, SatResult res,
                      const std::vector<int> &model) = 0;
 
-   virtual int getDivisionVariable() = 0;
-
-   virtual void setPhase(const int var, const bool value) = 0;
-
-   virtual void bumpVariableActivity(const int var, const int times) = 0;
-
    virtual void setInterrupt() = 0;
 
    virtual void unsetInterrupt() = 0;
@@ -60,7 +53,7 @@ public:
       slaves.push_back(slave);
       slave->parent = this;
    }
-
+   
    virtual ~WorkingStrategy() {}
 
 protected:

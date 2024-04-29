@@ -18,7 +18,6 @@
 // -----------------------------------------------------------------------------
 
 #include "clauses/ClauseDatabaseLockFree.h"
-#include "clauses/ClauseManager.h"
 #include "clauses/ClauseExchange.h"
 #include "utils/Logger.h"
 
@@ -26,7 +25,7 @@
 #include <stdio.h>
 #include <numeric>
 
-using namespace std;
+
 
 ClauseDatabaseLockFree::ClauseDatabaseLockFree()
 {
@@ -42,7 +41,7 @@ ClauseDatabaseLockFree::ClauseDatabaseLockFree()
 ClauseDatabaseLockFree::ClauseDatabaseLockFree(int maxClauseSize) : ClauseDatabase(maxClauseSize)
 {
    if(maxClauseSize <= 0){
-      LOG(0, "The value %d for maxClauseSize is not supported by ClauseDatabaseLockFree, it will be set to 50", maxClauseSize);
+      LOG( "The value %d for maxClauseSize is not supported by ClauseDatabaseLockFree, it will be set to 50", maxClauseSize);
    }
    this->maxClauseSize = 50;
 
@@ -62,19 +61,18 @@ ClauseDatabaseLockFree::~ClauseDatabaseLockFree()
    }
 }
 
-bool ClauseDatabaseLockFree::addClause(ClauseExchange *clause)
+bool ClauseDatabaseLockFree::addClause(std::shared_ptr<ClauseExchange> clause)
 {
    int clsSize = clause->size;
    if (clsSize <= 0)
    {
-      LOG(0, "Panic, want to add a clause of size 0, clause won't be added and will be released");
+      LOG( "Panic, want to add a clause of size 0, clause won't be added and will be released");
       return false;
    }
    if (clsSize <= this->maxClauseSize && (clauses[clsSize - 1]->size() + 1) * clsSize < 10000)
    {
       clauses[clsSize - 1]->addClause(clause);
       totalSizes[clsSize - 1]++;
-      ClauseManager::increaseClause(clause);
       return true;
    }
    else
@@ -83,8 +81,7 @@ bool ClauseDatabaseLockFree::addClause(ClauseExchange *clause)
    }
 }
 
-int ClauseDatabaseLockFree::giveSelection(vector<ClauseExchange *> &selectedCls,
-                                          unsigned totalSize)
+int ClauseDatabaseLockFree::giveSelection(std::vector<std::shared_ptr<ClauseExchange>> &selectedCls, unsigned totalSize)
 {
    int used = 0;
 
@@ -108,10 +105,10 @@ int ClauseDatabaseLockFree::giveSelection(vector<ClauseExchange *> &selectedCls,
          // Else how many clauses can be added
          // Add them one by one
          unsigned nCls = left / clsSize;
-         ClauseExchange *tmp_clause;
+         std::shared_ptr<ClauseExchange> tmp_clause;
          used = used + clsSize * nCls;
 
-         while (clauses[i]->getClause(&tmp_clause) && nCls > 0) // stops if no more clause is available or the needed quota is attained
+         while (clauses[i]->getClause(tmp_clause) && nCls > 0) // stops if no more clause is available or the needed quota is attained
          {
             selectedCls.push_back(tmp_clause);
             nCls--;
@@ -122,7 +119,7 @@ int ClauseDatabaseLockFree::giveSelection(vector<ClauseExchange *> &selectedCls,
    return used;
 }
 
-bool ClauseDatabaseLockFree::giveOneClause(ClauseExchange **cls)
+bool ClauseDatabaseLockFree::giveOneClause(std::shared_ptr<ClauseExchange> &cls)
 {
    for (auto &clauseBuffer : clauses)
    {
@@ -135,7 +132,7 @@ bool ClauseDatabaseLockFree::giveOneClause(ClauseExchange **cls)
    return false;
 }
 
-void ClauseDatabaseLockFree::getClauses(vector<ClauseExchange *> &v_cls)
+void ClauseDatabaseLockFree::getClauses(std::vector<std::shared_ptr<ClauseExchange>> &v_cls)
 {
    for (auto &clauseBuffer : clauses)
    {
@@ -153,9 +150,9 @@ void ClauseDatabaseLockFree::getSizes(std::vector<int> &nbClsPerSize)
    }
 }
 
-uint ClauseDatabaseLockFree::getSize()
+unsigned ClauseDatabaseLockFree::getSize()
 {
-   uint size = 0;
+   unsigned size = 0;
    int bufferCount = this->clauses.size();
    for (int i = 0; i < bufferCount; i++)
    {
@@ -169,7 +166,7 @@ void ClauseDatabaseLockFree::deleteClauses(int size)
 {
    if (size <= 0)
    {
-      LOG(2, "Deletion cancelled, received illegal clauseSize : %d\n", size);
+      LOGERROR( "Deletion cancelled, received illegal clauseSize : %d", size);
       return;
    }
    int bufferCount = this->clauses.size();

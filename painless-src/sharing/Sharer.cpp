@@ -30,170 +30,97 @@
 /// This is main of sharer threads.
 /// @param  arg contains a pointer to the associated class
 /// @return return NULL if the thread exit correctly
-static void *mainThrSharing(void *arg)
+void *mainThrSharing(void *arg)
 {
    Sharer *shr = (Sharer *)arg;
-   bool can_break = false;
+   usleep(Parameters::getIntParam("init-sleep", 0));
+
    int round = 0;
+   int nbStrats = shr->sharingStrategies.size();
+   int lastStrategy = -1;
+   int sleepTime = shr->sharingStrategies.front()->getSleepingTime() / nbStrats; // TODO : to be replaced
+   double sharingTime = 0;
    int wakeupRet = 0;
-   int sleepTime = shr->sharingStrategy->getSleepingTime();
    timespec sleepTimeSpec;
    getTimeSpecMicro(sleepTime, &sleepTimeSpec);
    timespec timespecCond;
-   usleep(Parameters::getIntParam("init-sleep", 0));
-   LOG(1, "Sharer #%d will start now, sleeptime: %d usec\n", shr->id, sleepTime);
+   usleep(Parameters::getIntParam("init-sleep", 1000));
+   LOG1("Sharer %d will start now", shr->id);
+
+   bool can_break = false;
 
    // SharingStatistics stats;
 
    while (!can_break)
    {
-      // Sleep
-      // usleep(sleepTime);
-      // no waiting if it is the end
+
+      lastStrategy = round % nbStrats;
+
+      // Sharing phase
+      sharingTime = getAbsoluteTime();
+      can_break = shr->sharingStrategies[lastStrategy]->doSharing();
+      sharingTime = getAbsoluteTime() - sharingTime;
+      LOG2("[Sharer %d] Sharing round %d done in %f s.", shr->id, round, sharingTime);
+
+      // sleep
       if (!globalEnding)
       {
-
          // wait for sleeptime time then wakeup (spurious ok)
          // if signaled the globalending will be managed by the strategy
          pthread_mutex_lock(&mutexGlobalEnd);
          getTimeToWait(&sleepTimeSpec, &timespecCond);
          wakeupRet = pthread_cond_timedwait(&condGlobalEnd, &mutexGlobalEnd, &timespecCond);
          pthread_mutex_unlock(&mutexGlobalEnd);
-         LOG(3, "sharer wakeupRet = %d , globalEnding = %d \n", wakeupRet, globalEnding.load());
+         LOGDEBUG1("sharer wakeupRet = %d , globalEnding = %d ", wakeupRet, globalEnding.load());
          // usleep(sleepTime);
       }
-      if (wakeupRet != ETIMEDOUT && wakeupRet != 0)
-      {
-         LOG(3, "Error %d on pthread_cond_wait in sharer, decided to do a simple sleep!", wakeupRet);
-         usleep(sleepTime);
-      }
+
       round++; // New round
-
-      // Add new solvers
-      // -------------------------
-      /*shr->addLock.lock();
-
-      shr->producers.insert(shr->producers.end(), shr->addProducers.begin(),
-                            shr->addProducers.end());
-      shr->addProducers.clear();
-
-      shr->consumers.insert(shr->consumers.end(), shr->addConsumers.begin(),
-                            shr->addConsumers.end());
-      shr->addConsumers.clear();
-
-      shr->addLock.unlock();*/
-
-      // Sharing phase
-      LOG(1, "Sharer %d will enter round  %d:\n", shr->id, round);
-      can_break = shr->sharingStrategy->doSharing();
-      // Remove solvers
-      // -------------------------
-      /*shr->removeLock.lock();
-
-      for (size_t i = 0; i < shr->removeProducers.size(); i++) {
-         shr->producers.erase(remove(shr->producers.begin(),
-                                     shr->producers.end(),
-                                     shr->removeProducers[i]),
-                              shr->producers.end());
-         shr->removeProducers[i]->release();
-      }
-      shr->removeProducers.clear();
-
-      for (size_t i = 0; i < shr->removeConsumers.size(); i++) {
-         shr->consumers.erase(remove(shr->consumers.begin(),
-                                     shr->consumers.end(),
-                                     shr->removeConsumers[i]),
-                              shr->consumers.end());
-         shr->removeConsumers[i]->release();
-      }
-      shr->removeConsumers.clear();
-
-      shr->removeLock.unlock();*/
-
-      if (can_break)
-      {
-         LOG(3, "Strategy '%s' ended with globalEnding = %d\n", typeid(*(shr->sharingStrategy)).name(), globalEnding.load());
-         break; // Need to stop
-      }
+      shr->totalSharingTime +=sharingTime;
    }
-   // in case it is the sharing strategy that detects first the ending.
-   // IMPORTANT: a strategy can decide to stop the sharer at any time it wants other than when global_ending = true. Thus the if before the broadcast on the conditional variable.
-   if (globalEnding)
+
+   // Removed strategy that ended
+   LOG3("Sharer %d strategy %d ended", shr->id, lastStrategy);
+   nbStrats--;
+
+   LOG3("Sharer %d has %d remaining strategies.", shr->id, nbStrats);
+
+   // Launch a final doSharing to make the other strategies finalize correctly (removed from the previous while(1) to lessen ifs)
+   for (int i = 0; i < nbStrats; i++)
    {
-      pthread_mutex_lock(&mutexGlobalEnd);
-      pthread_cond_broadcast(&condGlobalEnd);
-      pthread_mutex_unlock(&mutexGlobalEnd);
+      if(i == lastStrategy) continue;
+      LOG3("Sharer %d will end strategy %d", shr->id, i);
+      if (!shr->sharingStrategies[i]->doSharing())
+      {
+         LOGERROR("Panic, strategy %d didn't detect ending!", i);
+      }
    }
    return NULL;
 }
 
-Sharer::Sharer(int id, SharingStrategy *sharingStrategy)
+Sharer::Sharer(int _id, std::vector<std::shared_ptr<SharingStrategy>> &_sharingStrategies) : Entity(_id), sharingStrategies(_sharingStrategies)
 {
-   this->id = id;
-   this->sharingStrategy = sharingStrategy;
-
    sharer = new Thread(mainThrSharing, this);
 }
 
-Sharer::Sharer(int id_) : id(id_)
+Sharer::Sharer(int _id, std::shared_ptr<SharingStrategy> _sharingStrategy) : Entity(_id)
 {
-   sharingStrategy = nullptr;
+   sharingStrategies.push_back(_sharingStrategy);
+   sharer = new Thread(mainThrSharing, this);
 }
 
 Sharer::~Sharer()
 {
    this->join();
    delete sharer;
-
-   removeLock.lock();
-
-   for (int i = 0; i < removeProducers.size(); i++)
-   {
-      removeProducers[i]->release();
-   }
-
-   for (size_t i = 0; i < removeConsumers.size(); i++)
-   {
-      removeConsumers[i]->release();
-   }
-
-   removeLock.unlock();
-}
-
-void Sharer::addProducer(SharingEntity *sharingEntity)
-{
-   sharingEntity->increase();
-
-   addLock.lock();
-   addProducers.push_back(sharingEntity);
-   addLock.unlock();
-}
-
-void Sharer::addConsumer(SharingEntity *sharingEntity)
-{
-   sharingEntity->increase();
-
-   addLock.lock();
-   addConsumers.push_back(sharingEntity);
-   addLock.unlock();
-}
-
-void Sharer::removeProducer(SharingEntity *sharingEntity)
-{
-   removeLock.lock();
-   removeProducers.push_back(sharingEntity);
-   removeLock.unlock();
-}
-
-void Sharer::removeConsumer(SharingEntity *sharingEntity)
-{
-   removeLock.lock();
-   removeConsumers.push_back(sharingEntity);
-   removeLock.unlock();
 }
 
 void Sharer::printStats()
 {
-
-   this->sharingStrategy->printStats();
+   LOGSTAT("Sharer %d: executionTime: %f", this->getId(), this->totalSharingTime);
+   for (int i = 0; i < sharingStrategies.size(); i++)
+   {
+      LOGSTAT("Strategy '%s': ", typeid(*sharingStrategies[i]).name());
+      sharingStrategies[i]->printStats();
+   }
 }

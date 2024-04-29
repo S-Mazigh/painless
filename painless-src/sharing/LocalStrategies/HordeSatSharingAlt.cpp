@@ -18,64 +18,62 @@
 // -----------------------------------------------------------------------------
 #include "HordeSatSharingAlt.h"
 
-#include "clauses/ClauseManager.h"
 #include "solvers/SolverFactory.h"
+#include "utils/System.h"
 #include "utils/Logger.h"
 #include "utils/Parameters.h"
 #include "painless.h"
 
-HordeSatSharingAlt::HordeSatSharingAlt(int id, std::vector<SharingEntity *> &producers, std::vector<SharingEntity *> &consumers) : LocalSharingStrategy(id, producers, consumers)
+HordeSatSharingAlt::HordeSatSharingAlt(std::vector<std::shared_ptr<SharingEntity>> &producers, std::vector<std::shared_ptr<SharingEntity>> &consumers) : LocalSharingStrategy(producers, consumers)
 {
    // shr-lit * solver_nbr
-   this->literalPerRound = Parameters::getIntParam("shr-lit", 1500);
+   this->literalPerRound = Parameters::getIntParam("shr-lit", 1500) * this->producers.size();
+   this->sleepTime = Parameters::getIntParam("shr-sleep", 500000);
+   this->roundBeforeIncrease = Parameters::getIntParam("shr-horde-init-round", 1);
    this->round = 0;
    this->initPhase = true;
-   // number of round corresponding to 5% of the 5000s timeout
-   int sleepTime = Parameters::getIntParam("shr-sleep", 500000);
-   if (sleepTime)
-      this->roundBeforeIncrease = 250000000 / sleepTime;
-   else
+   unsigned lbdLimit = Parameters::getIntParam("shr-initial-lbd", 2);
+
+   for (auto &producer : this->producers)
    {
-      LOG(1, "Warning: sleepTime of sharing strategy is set to: %d", sleepTime);
-      this->roundBeforeIncrease = 250000000 / 500000;
+      producer->setLbdLimit(lbdLimit);
    }
-   // Init database
-   this->database = new ClauseDatabaseVector();
 
    if (Parameters::getBoolParam("dup"))
    {
       this->filter = new BloomFilter();
    }
+
+   LOGSTAT("[HordeAlt] Producers: %d, Consumers: %d, Initial Lbd limit: %u, sleep time: %d, round before increase: %d, literalsPerRound: %d", producers.size(), consumers.size(), lbdLimit, sleepTime, roundBeforeIncrease, literalPerRound);
 }
 
-HordeSatSharingAlt::HordeSatSharingAlt(int id, std::vector<SharingEntity *> &&producers, std::vector<SharingEntity *> &&consumers) : LocalSharingStrategy(id, producers, consumers)
+HordeSatSharingAlt::HordeSatSharingAlt(std::vector<std::shared_ptr<SharingEntity>> &&producers, std::vector<std::shared_ptr<SharingEntity>> &&consumers) : LocalSharingStrategy(producers, consumers)
 {
-   // shr-lit * solver_nbr
-   this->literalPerRound = Parameters::getIntParam("shr-lit", 1500);
+   this->literalPerRound = Parameters::getIntParam("shr-lit", 1500) * this->producers.size();
    this->round = 0;
    this->initPhase = true;
-   // number of round corresponding to 5% of the 5000s timeout
-   int sleepTime = Parameters::getIntParam("shr-sleep", 500000);
-   if (sleepTime)
-      this->roundBeforeIncrease = 250000000 / sleepTime;
-   else
+   unsigned lbdLimit = Parameters::getIntParam("shr-initial-lbd", 2);
+
+   for (auto &producer : this->producers)
    {
-      LOG(1, "Warning: sleepTime of sharing strategy is set to: %d", sleepTime);
-      this->roundBeforeIncrease = 250000000 / 500000;
+      producer->setLbdLimit(lbdLimit);
    }
 
-   // Init database
-   this->database = new ClauseDatabaseVector();
+   this->sleepTime = Parameters::getIntParam("shr-sleep", 500000);
+
+   this->roundBeforeIncrease = Parameters::getIntParam("shr-horde-init-round", 1);
 
    if (Parameters::getBoolParam("dup"))
    {
       this->filter = new BloomFilter();
    }
+
+   LOGSTAT("[HordeAlt] Producers: %d, Consumers: %d, Initial Lbd limit: %u, sleep time: %d, round before increase: %d, literalsPerRound: %d", producers.size(), consumers.size(), lbdLimit, sleepTime, roundBeforeIncrease, literalPerRound);
 }
 
 HordeSatSharingAlt::~HordeSatSharingAlt()
 {
-   delete database;
+   // delete database;
    if (Parameters::getBoolParam("dup"))
    {
       delete filter;
@@ -84,19 +82,64 @@ HordeSatSharingAlt::~HordeSatSharingAlt()
 
 bool HordeSatSharingAlt::doSharing()
 {
+   round++;
+
    if (globalEnding)
       return true;
-   // 1- Fill the database using all the producers
-   for (auto producer : producers)
-   {
-      unfiltered.clear();
-      filtered.clear();
 
-      if (Parameters::getBoolParam("dup"))
+   if (this->mustAddEntities)
+   {
+      LOGDEBUG1("[HordeAlt] Adding new entities");
+      this->addLock.lock();
+      this->addSharingEntities(this->addProducers, this->producers);
+      this->addSharingEntities(this->addConsumers, this->consumers);
+      this->addLock.unlock();
+      this->mustAddEntities = false;
+
+      /* Update literalsPerRound */
+      this->literalPerRound = Parameters::getIntParam("shr-lit", 1500) * this->producers.size();
+      LOGSTAT("[HordeAlt] [Update] Producers: %d, Consumers: %d, literalsPerRound: %d", producers.size(), consumers.size(), literalPerRound);
+
+      /* TODO : optimize by introducing addUnits in sharingEntity */
+      for (int lit : this->units)
       {
+         std::shared_ptr<ClauseExchange> tmpCls = std::make_shared<ClauseExchange>(std::vector<int>{lit}, 0, -1);
+         LOGDEBUG2("Import unit clause [size: %d, lit: %d]", tmpCls->size, lit);
+         for (auto consumer : this->addConsumers)
+         {
+            consumer->importClause(tmpCls);
+         }
+      }
+
+      /* Temp solution: this can make so that some new solvers don't receive the units */
+      this->units.clear();
+   }
+
+   if (this->mustRemoveEntities)
+   {
+      LOGDEBUG1("[HordeAlt] Removing old entities");
+      this->removeLock.lock();
+      this->removeSharingEntities(this->removeProducers, this->producers);
+      this->removeSharingEntities(this->removeConsumers, this->consumers);
+      this->removeLock.unlock();
+      this->mustRemoveEntities = false;
+
+      /* Update literalsPerRound */
+      this->literalPerRound = Parameters::getIntParam("shr-lit", 1500) * this->producers.size();
+      LOGSTAT("[HordeAlt] [Update] Producers: %d, Consumers: %d, literalsPerRound: %d", producers.size(), consumers.size(), literalPerRound);
+   }
+
+   // 1- Fill the database using all the producers
+   if (Parameters::getBoolParam("dup"))
+   {
+      for (auto producer : producers)
+      {
+         unfiltered.clear();
+         filtered.clear();
+
          producer->exportClauses(unfiltered);
          // ref = 1
-         for (ClauseExchange *c : unfiltered)
+         for (std::shared_ptr<ClauseExchange> c : unfiltered)
          {
             if (!filter->contains_or_insert(c->lits))
             {
@@ -105,58 +148,74 @@ bool HordeSatSharingAlt::doSharing()
          }
          stats.receivedClauses += unfiltered.size();
          stats.receivedDuplicas += (unfiltered.size() - filtered.size());
+
+         // if solver checks the usage percentage else nothing fancy to do
+         producer->accept(this);
       }
-      else
+   }
+   else
+   {
+      for (auto producer : producers)
       {
          producer->exportClauses(filtered);
          stats.receivedClauses += filtered.size();
-      }
-
-      // if solver checks the usage percentage else nothing fancy to do
-      producer->accept(this);
-
-      for (auto cls : filtered)
-      {
-         this->database->addClause(cls); // if not added it is released : ref = 0
+         producer->accept(this);
       }
    }
+
+   std::vector<std::shared_ptr<ClauseExchange>> selectedClauses;
+
+   selectedClauses.insert(selectedClauses.end(), std::make_move_iterator(filtered.begin()), std::make_move_iterator(filtered.end()));
 
    unfiltered.clear();
    filtered.clear();
-   // 2- Get selection
-   // consumer receives the same amount as in the original
-   this->database->giveSelection(filtered, literalPerRound * producers.size());
 
-   stats.sharedClauses += filtered.size();
+   std::sort(selectedClauses.begin(), selectedClauses.end(), [](std::shared_ptr<ClauseExchange> &a, std::shared_ptr<ClauseExchange> &b)
+             { return a->size < b->size || (a->size == b->size && a->lbd < b->lbd); });
 
-   // 3-Send the best clauses (all producers included) to all consumers
-   for (auto consumer : consumers)
+   int sharedLiterals = 0;
+   unsigned size = selectedClauses.size();
+   int i = 0;
+
+   // 3a- share all units
+   while (i < size && 1 == selectedClauses[i]->size)
    {
-      for (auto cls : filtered)
+      this->units.insert(selectedClauses[i]->lits[0]); /* for added consumers */
+      LOGDEBUG2("Unit : %d", selectedClauses[i]->lits[0]);
+
+      for (auto consumer : consumers)
       {
-         if (cls->from != consumer->id)
-         {
-            consumer->importClause(cls);
-         }
+         consumer->importClause(selectedClauses[i]);
       }
+      // do not count on sharedLiterals
+      stats.sharedClauses++;
+      i++;
    }
 
-   // release the clauses of this context
-   for (auto cls : filtered)
+   // 3b- share the other clauses with a limit of literalsPerRound
+   while (i < size)
    {
-      ClauseManager::releaseClause(cls);
+      sharedLiterals += selectedClauses[i]->size;
+      if (sharedLiterals > this->literalPerRound)
+         break;
+      for (auto consumer : consumers)
+      {
+         consumer->importClause(selectedClauses[i]);
+      }
+      stats.sharedClauses++;
+      i++;
    }
 
-   LOG(1, "[HordeSatAlt %d] received cls %ld, shared cls %ld\n", idSharer, stats.receivedClauses, stats.sharedClauses);
+   LOG2("[HordeAlt] received cls %ld, shared cls %ld", stats.receivedClauses, stats.sharedClauses);
 
    if (globalEnding)
       return true;
    return false;
 }
 
-void HordeSatSharingAlt::visit(SolverInterface *solver)
+void HordeSatSharingAlt::visit(SolverCdclInterface *solver)
 {
-   LOG(3, "[HordeSatAlt %d] Visiting the solver %d\n", idSharer, solver->id);
+   LOG4("[HordeAlt] Visiting the solver %d", solver->id);
 
    // Here I check the number of produced clauses before selecting them (maybe will not cause solvers to export potentially useless clauses)
    int usedPercent;
@@ -164,12 +223,12 @@ void HordeSatSharingAlt::visit(SolverInterface *solver)
    if (usedPercent < 75 && !this->initPhase)
    {
       solver->increaseClauseProduction();
-      LOG(3, "[HordeAlt %d] production increase for solver %d.\n", this->idSharer, solver->id);
+      LOG3("[HordeAlt] production increase for solver %d.", solver->id);
    }
    else if (usedPercent > 98)
    {
       solver->decreaseClauseProduction();
-      LOG(3, "[HordeAlt %d] production decrease for solver %d.\n", this->idSharer, solver->id);
+      LOG3("[HordeAlt] production decrease for solver %d.", solver->id);
    }
    if (round >= this->roundBeforeIncrease)
    {
@@ -179,14 +238,14 @@ void HordeSatSharingAlt::visit(SolverInterface *solver)
 
 void HordeSatSharingAlt::visit(SharingEntity *sh_entity)
 {
-   LOG(3, "[HordeSatAlt %d] Visiting the sh_entity %d\n", idSharer, sh_entity->id);
+   LOG4("[HordeAlt] Visiting the sh_entity %d", sh_entity->id);
 }
 
 #ifndef NDIST
 void HordeSatSharingAlt::visit(GlobalDatabase *g_base)
 {
-   LOG(3, "[HordeSatAlt %d] Visiting the global database %d\n", idSharer, g_base->id);
+   LOG4("[HordeAlt] Visiting the global database %d", g_base->id);
 
-   LOG(1, "[HordeSatAlt %d] Added %d clauses imported from another process\n", idSharer, filtered.size());
+   LOG2("[HordeAlt] Added %d clauses imported from another process", filtered.size());
 }
 #endif

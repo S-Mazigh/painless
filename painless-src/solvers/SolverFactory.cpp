@@ -16,147 +16,151 @@
 // You should have received a copy of the GNU General Public License along with
 // this program.  If not, see <http://www.gnu.org/licenses/>.
 // -----------------------------------------------------------------------------
-
-#include "solvers/KissatMABSolver.h"
 #include "solvers/SolverFactory.h"
-#include "solvers/Reducer.h"
-#include "solvers/MapleCOMSPSSolver.h"
 #include "utils/Parameters.h"
 #include "utils/System.h"
+#include "utils/Logger.h"
+#include "painless.h"
 
-void SolverFactory::sparseRandomDiversification(
-    const std::vector<SolverInterface *> &solvers)
+#include <cassert>
+#include <random>
+
+void SolverFactory::diversification(const std::vector<std::shared_ptr<SolverCdclInterface>> &cdclSolvers, const std::vector<std::shared_ptr<LocalSearchSolver>> &localSolvers, bool dist, int mpi_rank, int world_size)
 {
-   if (solvers.size() == 0)
-      return;
+   /* More flexibile diversification */
+   unsigned nb_solvers = cdclSolvers.size(); // cdclSolvers.size() + localSolvers.size();
+   unsigned maxId = (dist) ? nb_solvers * world_size : nb_solvers;
 
-   int vars = solvers[0]->getVariablesCount();
-
-   // The first solver of the group (1 LRB/1 VSIDS) keeps polarity = false for all vars
-   for (int sid = 1; sid < solvers.size(); sid++)
+   /* TODO: solvers must init this by themselves in the constructor*/
+   if (dist)
    {
-      // srand(sid);
-      for (int var = 1; var <= vars; var++)
+      for (auto &solver : cdclSolvers)
       {
-         if (rand() % solvers.size() == 0)
-         {
-            solvers[sid]->setPhase(var, rand() % 2 == 1);
-         }
+         assert(mpi_rank >= 0);
+         solver->setId(nb_solvers * mpi_rank + solver->id);
       }
    }
-}
 
-void SolverFactory::diversification(const std::vector<SolverInterface *> &solvers)
-{
-   LOG(2, "Diversification: \n");
-   for (auto solver : solvers)
+   if (maxId <= 2)
    {
-      solver->diversify();
+      LOGWARN("Not enough solvers (%d) to perform a good diversification (need >= 2)", maxId);
    }
-}
 
-void SolverFactory::initshuffleDiversification(const std::vector<SolverInterface *> &solvers)
-{
-   for (int sid = 0; sid < solvers.size(); sid++)
+   // std::random_device uses /dev/urandom by default (to be checked)
+   std::mt19937 engine(std::random_device{}());
+   std::uniform_int_distribution<int> uniform(1, Parameters::getIntParam("max-div-noise", 100)); /* test with a normal dist*/
+
+   SolverDivFamily family = SolverDivFamily::MIXED_SWITCH;
+
+   LOGDEBUG1("Diversification on: nb_solvers = %d, dist = %d, mpi_rank = %d, world_size = %d, maxId = %d", nb_solvers, dist, mpi_rank, world_size, maxId);
+
+   for (auto cdclSolver : cdclSolvers)
    {
-      solvers[sid]->initshuffle(sid);
+      /* TODO: Use mpi_rank if dist and certain Global Strat*/
+      /* % maxId is useful when new solvers are added afterwards */
+      family = ((cdclSolver->id % maxId) < maxId / 3) ? SolverDivFamily::UNSAT_FOCUSED : ((cdclSolver->id % maxId) < maxId * 2 / 3) ? SolverDivFamily::SAT_STABLE
+                                                                                                                                    : SolverDivFamily::MIXED_SWITCH;
+      cdclSolver->setFamily(family);
+      cdclSolver->diversify(engine, uniform);
+      // solver->printParameters();
    }
+
+   for (auto localSolver : localSolvers)
+   {
+      localSolver->diversify(engine, uniform);
+   }
+
+   LOG("Diversification done");
 }
 
-SolverInterface *
-SolverFactory::createKissatMABSolver()
+void SolverFactory::createSolver(char type, std::vector<std::shared_ptr<SolverCdclInterface>> &cdclSolvers, std::vector<std::shared_ptr<LocalSearchSolver>> &localSolvers)
 {
    int id = currentIdSolver.fetch_add(1);
-   SolverInterface *solver = new KissatMABSolver(id);
-
-   // solver->loadFormula(Parameters::getFilename()); // done in main by readWorker
-
-   return solver;
-}
-
-void SolverFactory::createKissatMABSolvers(int maxSolvers,
-                                             std::vector<SolverInterface *> &solvers)
-{
-   for (size_t i = 0; i < maxSolvers; i++)
+   switch (type)
    {
-      KissatMABSolver *kissat = (KissatMABSolver *)createKissatMABSolver();
-      solvers.push_back(kissat);
+#ifdef GLUCOSE_
+   case 'g':
+      // GLUCOSE implementation
+      break;
+#endif
+
+#ifdef LINGELING_
+   case 'l':
+      // LINGELING implementation
+      break;
+#endif
+
+#ifdef MAPLECOMSPS_
+   case 'a':
+      cdclSolvers.emplace_back(std::make_shared<MapleCOMSPSSolver>(id));
+      break;
+#endif
+
+#ifdef MINISAT_
+   case 'm':
+      // MINISAT implementation
+      break;
+#endif
+
+#ifdef KISSATMAB_
+   case 'k':
+      cdclSolvers.emplace_back(std::make_shared<KissatMABSolver>(id));
+      break;
+#endif
+
+#ifdef KISSATGASPI_
+   case 'K':
+      cdclSolvers.emplace_back(std::make_shared<KissatGASPISolver>(id));
+      break;
+#endif
+
+#ifdef YALSAT_
+   case 'y':
+      localSolvers.emplace_back(std::make_shared<YalSat>(id));
+      break;
+#endif
+
+   default:
+      LOGERROR("The SolverCdclType %d specified is not available!", type);
+      exit(-1);
+      break;
    }
 }
 
-SolverInterface *
+void SolverFactory::createSolvers(int maxSolvers, std::string portfolio, std::vector<std::shared_ptr<SolverCdclInterface>> &cdclSolvers, std::vector<std::shared_ptr<LocalSearchSolver>> &localSolvers)
+{
+   unsigned typeCount = portfolio.size();
+   for (size_t i = 0; i < maxSolvers; i++)
+   {
+      createSolver(portfolio.at(i % typeCount), cdclSolvers, localSolvers);
+   }
+}
+
+Reducer *
 SolverFactory::createReducerSolver()
 {
    int id = currentIdSolver.fetch_add(1);
 
-   SolverInterface *solver = new Reducer(id, SolverFactory::createMapleCOMSPSSolver());
+   Reducer *solver = new Reducer(id, SolverCdclType::MAPLE);
 
    return solver;
 }
 
-SolverInterface *
-SolverFactory::createMapleCOMSPSSolver()
+void SolverFactory::printStats(const std::vector<std::shared_ptr<SolverCdclInterface>> &cdclSolvers, const std::vector<std::shared_ptr<LocalSearchSolver>> &localSolvers)
 {
-   int id = currentIdSolver.fetch_add(1);
+   /*LOGSTAT(" | ID | conflicts  | propagations |  restarts  | decisions  "
+       "| memPeak |");*/
 
-   SolverInterface *solver = new MapleCOMSPSSolver(id);
-
-   return solver;
-}
-
-// Distributed versions
-#ifndef NDIST
-
-void SolverFactory::sparseRandomDiversification(
-    const vector<SolverInterface *> &solvers, int mpi_rank, int ncpu)
-{
-   if (solvers.size() == 0)
-      return;
-
-   int vars = solvers[0]->getVariablesCount();
-
-   // The first solver of the group (1 LRB/1 VSIDS) keeps polarity = false for all vars
-   for (int sid = 1; sid < solvers.size(); sid++)
-   {
-      srand(ncpu * mpi_rank + sid);
-      for (int var = 1; var <= vars; var++)
-      {
-         if (rand() % solvers.size() == 0)
-         {
-            solvers[sid]->setPhase(var, rand() % 2 == 1);
-         }
-      }
-   }
-}
-
-void SolverFactory::initshuffleDiversification(const vector<SolverInterface *> &solvers, int mpi_rank, int ncpu)
-{
-   for (int sid = 0; sid < solvers.size(); sid++)
-   {
-      /* TODO: check the correctness of the formula
-         ncpu * mpi_rank + solver_id
-      */
-      solvers[sid]->initshuffle(ncpu * mpi_rank + sid);
-   }
-}
-#endif
-
-void SolverFactory::printStats(const std::vector<SolverInterface *> &solvers)
-{
-   printf("c | ID | conflicts  | propagations |  restarts  | decisions  "
-          "| memPeak |\n");
-
-   for (size_t i = 0; i < solvers.size(); i++)
-   {
-      SolvingStatistics stats = solvers[i]->getStatistics();
-
-      printf("c | %2zu | %10ld | %12ld | %10ld | %10ld | %7d |\n",
-             solvers[i]->id, stats.conflicts, stats.propagations,
-             stats.restarts, stats.decisions, (int)stats.memPeak);
-   }
-   for (SolverInterface *s : solvers)
+   for (auto s : cdclSolvers)
    {
       // if (s->testStrengthening())
-      s->getStatistics();
+      s->printStatistics();
+   }
+
+   /*LOGSTAT(" | ID | flips  | unsatClauses |  restarts | memPeak |");*/
+   for (auto s : localSolvers)
+   {
+      // if (s->testStrengthening())
+      s->printStatistics();
    }
 }

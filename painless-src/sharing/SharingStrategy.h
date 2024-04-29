@@ -23,9 +23,9 @@
 #include "sharing/SharingEntityVisitor.h"
 
 // To include the real types
-#include "../solvers/SolverInterface.hpp"
+#include "../solvers/SolverCdclInterface.hpp"
 #include "sharing/GlobalDatabase.h"
-#include "sharing/SharingEntity.h"
+#include "sharing/SharingEntity.hpp"
 
 #include <vector>
 
@@ -40,7 +40,7 @@ class SharingStrategy
 {
 public:
    /// Constructors
-   SharingStrategy(int id) : idSharer(id) {}
+   SharingStrategy() {}
 
    /// Destructor.
    virtual ~SharingStrategy() {}
@@ -59,11 +59,5 @@ public:
    /// @brief To count the number of literals present in a vector of clauses
    /// @param clauses the vector of clauses
    /// @return the number of literals in the vector clauses
-   static int getLiteralsCount(std::vector<ClauseExchange *> clauses);
-
-   inline int getId() { return idSharer; }
-
-protected:
-   /// @brief Id of the sharer using this strategy instance for logging purpose
-   int idSharer;
+   static int getLiteralsCount(std::vector<std::shared_ptr<ClauseExchange>> clauses);
 };
