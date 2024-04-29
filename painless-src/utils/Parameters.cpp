@@ -1,4 +1,6 @@
 #include "Parameters.h"
+#include "ErrorCodes.h"
+#include <filesystem>
 
 char *Parameters::binName = nullptr;
 std::map<std::string, std::string> Parameters::params;
@@ -15,6 +17,13 @@ void Parameters::init(int argc, char **argv)
       if (arg[0] != '-' && filename == NULL)
       {
          filename = arg;
+         // Check if the file exists
+         if (!std::filesystem::exists(filename))
+         {
+            LOGERROR("Error: File '%s' not found.",filename);
+            exit(PERR_ARGS_ERROR); // Or handle the error appropriately
+         }
+
          continue;
       }
 

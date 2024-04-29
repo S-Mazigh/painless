@@ -57,8 +57,9 @@ void PortfolioPRS::solve(const std::vector<int> &cube)
    std::vector<std::shared_ptr<SolverCdclInterface>> cdclSolvers;
    std::vector<std::shared_ptr<LocalSearchSolver>> localSolvers;
 
-   int nbKissat = 9;
-   int nbGaspi = 5;
+   int nbKissat = (cpus > 9) ? 9 : cpus;
+   int nbGaspi = (cpus - nbKissat > 5) ? 5 : (cpus - nbKissat > 0) ? cpus - nbKissat
+                                                                   : 0;
 
    strategyEnding = false;
    /* PRS */
@@ -95,11 +96,13 @@ void PortfolioPRS::solve(const std::vector<int> &cube)
    for (int i = 0; i < nbGaspi; i++)
       SolverFactory::createSolver('K', cdclSolvers, localSolvers);
    // one yalsat or kissat_mab
-   if(initClauses.size() < 30 * MILLION)
-      SolverFactory::createSolver('y', cdclSolvers, localSolvers);
-   else
-      SolverFactory::createSolver('k', cdclSolvers, localSolvers);
-
+   if (cpus > nbGaspi + nbKissat)
+   {
+      if (initClauses.size() < 30 * MILLION)
+         SolverFactory::createSolver('y', cdclSolvers, localSolvers);
+      else
+         SolverFactory::createSolver('k', cdclSolvers, localSolvers);
+   }
    SolverFactory::diversification(cdclSolvers, localSolvers, Parameters::getBoolParam("dist"), mpi_rank, world_size);
 
    for (auto cdcl : cdclSolvers)
