@@ -24,10 +24,11 @@
 #include <stdio.h>
 #include <sys/time.h>
 #include "utils/Parameters.h"
-#include "painless.h"
+#include "MpiUtils.h"
 
 #include <mutex>
 #include <cmath>
+#include <atomic>
 
 static std::mutex logMutex;
 

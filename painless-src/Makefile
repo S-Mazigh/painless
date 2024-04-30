@@ -1,4 +1,4 @@
-SRCS := $(shell find . -name "*.cpp" -not -path "./.ignores/*")
+SRCS := $(shell find . -name "*.cpp" -or -name "*.cc" -not -path "./.ignores/*")
 
 OBJS = $(addsuffix .o, $(basename $(SRCS)))
 
@@ -22,7 +22,7 @@ LIBS := -l:libyals.a -L$(YALSAT_BUILD) \
        -l:libgkissat.a -L$(KISSATGASPI_BUILD) \
        -l:libmapleCOMSPS.a -L../solvers/mapleCOMSPS/build/release/lib/ \
        -l:libm4ri.a -L../libs/m4ri-20200125/.libs \
-       -lpthread -lz -lm $(shell mpic++ --showme:link)
+       -lpthread -lz -lm -lprotobuf $(shell mpic++ --showme:link)
 
 CXXFLAGS := -I. \
            -I../solvers \
@@ -30,7 +30,7 @@ CXXFLAGS := -I. \
            -I../libs/m4ri-20200125 \
            $(shell mpic++ --showme:compile)\
            -D __STDC_LIMIT_MACROS -D __STDC_FORMAT_MACROS \
-           -fopenmp $(STATIC_FLAGS) -std=c++17 -O3 -DNDEBUG#-O0 -g3 #-O3 -DNDEBUG#-fsanitize=address#-fsanitize=thread #
+           -fopenmp $(STATIC_FLAGS) -std=c++17 -O0 -g3#-O0 -g3 #-O3 -DNDEBUG#-fsanitize=address#-fsanitize=thread #
 
 $(EXEC): $(OBJS)
 	$(CXX) -o $@ $^ $(CXXFLAGS) $(LIBS)

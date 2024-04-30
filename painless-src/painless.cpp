@@ -58,16 +58,6 @@ std::vector<Sharer *> sharers;
 
 WorkingStrategy *working = NULL;
 
-#ifndef NDIST
-int mpi_rank = -1;
-int world_size = -1;
-int mpi_winner = -1;
-#else
-int mpi_rank = 0;
-int world_size = 0;
-int mpi_winner = 0;
-#endif
-
 std::atomic<bool> dist = false;
 
 // needed for diversification

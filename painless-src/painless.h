@@ -41,15 +41,6 @@ extern WorkingStrategy *working;
 /// Array of sharers
 extern std::vector<Sharer *> sharers;
 
-/// @brief Mpi rank of this process
-extern int mpi_rank;
-
-/// @brief The number of mpi processes launched
-extern int world_size;
-
-/// @brief Mpi rank of the winner
-extern int mpi_winner;
-
 /// Size of the array of sharers
 extern int nSharers;
 

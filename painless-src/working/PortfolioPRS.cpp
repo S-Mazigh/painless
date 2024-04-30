@@ -57,39 +57,65 @@ void PortfolioPRS::solve(const std::vector<int> &cube)
    std::vector<std::shared_ptr<SolverCdclInterface>> cdclSolvers;
    std::vector<std::shared_ptr<LocalSearchSolver>> localSolvers;
 
+   int receivedFinalResultBcast;
+   unsigned varCount;
+   int res;
+
    int nbKissat = (cpus > 9) ? 9 : cpus;
    int nbGaspi = (cpus - nbKissat > 5) ? 5 : (cpus - nbKissat > 0) ? cpus - nbKissat
                                                                    : 0;
 
    strategyEnding = false;
-   /* PRS */
-   int res = prs.do_preprocess(Parameters::getFilename());
-   LOGDEBUG1("PRS returned %d", res);
-   if (20 == res)
+
+   // Mpi rank 0 is the leader, sole executor of PRS preprocessing.
+   if (0 == mpi_rank)
    {
-      LOG("PRS answered UNSAT");
-      finalResult = SatResult::UNSAT;
-      this->join(this, finalResult, {});
-      return;
-   }
-   else if (10 == res)
-   {
-      LOG("PRS answered SAT");
-      for (int i = 1; i <= prs.vars; i++)
+      /* PRS */
+      res = prs.do_preprocess(Parameters::getFilename());
+      LOGDEBUG1("PRS returned %d", res);
+      if (20 == res)
       {
-         finalModel.push_back(prs.model[i]);
+         LOG("PRS answered UNSAT");
+         finalResult = SatResult::UNSAT;
+         this->join(this, finalResult, {});
+         return;
       }
-      finalResult = SatResult::SAT;
-      this->join(this, finalResult, finalModel);
+      else if (10 == res)
+      {
+         LOG("PRS answered SAT");
+         for (int i = 1; i <= prs.vars; i++)
+         {
+            finalModel.push_back(prs.model[i]);
+         }
+         finalResult = SatResult::SAT;
+         this->join(this, finalResult, finalModel);
+         return;
+      }
+
+      receivedFinalResultBcast = finalResult;
+
+      // Free some memory
+      prs.release_most();
+
+      varCount = prs.vars;
+
+      // PRS uses indexes from 1 to prs.clauses
+      initClauses = std::move(prs.clause);
+      initClauses.erase(initClauses.begin());
+   }
+
+   MPI_Bcast(&receivedFinalResultBcast, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+   if (receivedFinalResultBcast != 0)
+   {
+      finalResult = static_cast<SatResult>(receivedFinalResultBcast);
+      mpi_winner = 0;
+      LOGDEBUG1("[PRS] It is the mpi end: %d", finalResult);
       return;
    }
 
-   // Free some memory
-   prs.release_most();
-
-   // PRS uses indexes from 1 to prs.clauses
-   initClauses = std::move(prs.clause);
-   initClauses.erase(initClauses.begin());
+   // Send instance via MPI from leader 0 to workers.
+   sendFormula(initClauses, &varCount, 0);
 
    for (int i = 0; i < nbKissat; i++)
       SolverFactory::createSolver('k', cdclSolvers, localSolvers);
@@ -107,11 +133,11 @@ void PortfolioPRS::solve(const std::vector<int> &cube)
 
    for (auto cdcl : cdclSolvers)
    {
-      clausesLoad.emplace_back(&LocalSearchSolver::addInitialClauses, cdcl, std::ref(initClauses), prs.vars);
+      clausesLoad.emplace_back(&LocalSearchSolver::addInitialClauses, cdcl, std::ref(initClauses), varCount);
    }
    for (auto local : localSolvers)
    {
-      clausesLoad.emplace_back(&LocalSearchSolver::addInitialClauses, local, std::ref(initClauses), prs.vars);
+      clausesLoad.emplace_back(&LocalSearchSolver::addInitialClauses, local, std::ref(initClauses), varCount);
    }
 
    /* Sharing */
