@@ -2,7 +2,7 @@
 #include <mpi.h>
 #include "Logger.h"
 #include "painless.h"
-#include "clauses/protobuf/Clauses.pb.h"
+#include "protobuf/Clauses.pb.h"
 
 #ifndef NDIST
 int mpi_rank = -1;
