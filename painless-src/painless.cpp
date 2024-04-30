@@ -201,6 +201,7 @@ int main(int argc, char **argv)
 
    if (dist)
    {
+      static_cast<PortfolioPRS *>(working)->restoreModelDist();
       delete working;
       TESTRUNMPI(MPI_Finalize());
    }
@@ -211,7 +212,7 @@ int main(int argc, char **argv)
       {
          logSolution("SATISFIABLE");
 
-         if (Parameters::getBoolParam("no-model") == false && finalModel.size() != 0)
+         if (Parameters::getBoolParam("no-model") == false)
          {
             logModel(finalModel);
          }

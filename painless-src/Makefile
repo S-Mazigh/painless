@@ -30,7 +30,7 @@ CXXFLAGS := -I. \
            -I../libs/m4ri-20200125 \
            $(shell mpic++ --showme:compile)\
            -D __STDC_LIMIT_MACROS -D __STDC_FORMAT_MACROS \
-           -fopenmp $(STATIC_FLAGS) -std=c++17 -O0 -g3#-O0 -g3 #-O3 -DNDEBUG#-fsanitize=address#-fsanitize=thread #
+           -fopenmp $(STATIC_FLAGS) -std=c++17 -O3 -DNDEBUG#-O0 -g3 #-O3 -DNDEBUG#-fsanitize=address#-fsanitize=thread #
 
 $(EXEC): $(OBJS)
 	$(CXX) -o $@ $^ $(CXXFLAGS) $(LIBS)

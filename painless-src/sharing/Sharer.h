@@ -46,14 +46,17 @@ public:
    /// @brief To join the thread of this sharer object
    inline void join()
    {
+      if(sharer == nullptr) return ;
       sharer->join();
-      LOGDEBUG1("Sharer %d joined", id);
+      delete sharer;
+      sharer = nullptr;
+       LOGDEBUG1("Sharer %d joined", id);
    }
 
 protected:
    /// Pointer to the thread in charge of sharing.
    Thread *sharer;
-   
+
    /// @brief Heuristic for strategy implementation comparaison (TODO: ifndef NSTAT for such probes)
    double totalSharingTime = 0;
 
@@ -64,5 +67,4 @@ protected:
    /// @param  sharer the sharer object
    /// @return NULL if well ended
    friend void *mainThrSharing(void *);
-
 };

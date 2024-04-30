@@ -8,6 +8,7 @@
 #define MYMPI_CLAUSES 1
 #define MYMPI_OK 2
 #define MYMPI_NOTOK 3
+#define MYMPI_MODEL 4
 
 #define COLOR_YES 10
 

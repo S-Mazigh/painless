@@ -112,7 +112,6 @@ Sharer::Sharer(int _id, std::shared_ptr<SharingStrategy> _sharingStrategy) : Ent
 Sharer::~Sharer()
 {
    this->join();
-   delete sharer;
 }
 
 void Sharer::printStats()

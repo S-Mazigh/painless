@@ -41,6 +41,8 @@ public:
    void join(WorkingStrategy *strat, SatResult res,
              const std::vector<int> &model);
 
+   void restoreModelDist();
+
    void setInterrupt();
 
    void unsetInterrupt();

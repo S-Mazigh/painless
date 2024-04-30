@@ -204,7 +204,7 @@ void PortfolioPRS::solve(const std::vector<int> &cube)
 void PortfolioPRS::join(WorkingStrategy *strat, SatResult res,
                         const std::vector<int> &model)
 {
-   if (res == UNKNOWN || strategyEnding || globalEnding)
+   if (res == UNKNOWN || strategyEnding)
       return;
 
    strategyEnding = true;
@@ -218,9 +218,12 @@ void PortfolioPRS::join(WorkingStrategy *strat, SatResult res,
 
       if (res == SAT)
       {
-         finalModel = model; /* Make model non const for safe move ? */
-         /* remove potential sbva added variables */
-         prs.restoreModel(finalModel);
+         finalModel = model;
+
+         if (mpi_rank == 0)
+         {
+            prs.restoreModel(finalModel);
+         }
       }
       if (strat != this)
       {
@@ -240,6 +243,45 @@ void PortfolioPRS::join(WorkingStrategy *strat, SatResult res,
    { // Else forward the information to the parent strategy
       parent->join(this, res, model);
    }
+}
+
+void PortfolioPRS::restoreModelDist()
+{
+   for (int i = 0; i < this->sharers.size(); i++)
+      sharers[i]->join();
+
+   LOGDEBUG1("Restoring Dist Model mpi_winner=%d, finalResult=%d", mpi_winner, finalResult);
+
+   if (mpi_winner == 0 || finalResult != SatResult::SAT)
+      return;
+
+   MPI_Status status;
+
+   if (mpi_rank == mpi_winner)
+   {
+      LOGDEBUG1("Winner %d sending model of size %d", mpi_winner, finalModel.size());
+      MPI_Send(finalModel.data(), finalModel.size(), MPI_INT, 0, MYMPI_MODEL, MPI_COMM_WORLD);
+   }
+
+   else if (0 == mpi_rank)
+   {
+      int size;
+      LOGDEBUG1("Root is waiting for model");
+
+      MPI_Probe(mpi_winner, MYMPI_MODEL, MPI_COMM_WORLD, &status);
+      MPI_Get_count(&status, MPI_INT, &size);
+
+      assert(mpi_winner == status.MPI_SOURCE);
+      assert(MYMPI_MODEL == status.MPI_TAG);
+
+      finalModel.resize(size);
+
+      MPI_Recv(finalModel.data(), size, MPI_INT, mpi_winner, MYMPI_MODEL, MPI_COMM_WORLD, &status);
+      LOGDEBUG1("Root received a model of size %d", size);
+      this->prs.restoreModel(finalModel);
+   }
+
+   mpi_winner = 0;
 }
 
 void PortfolioPRS::setInterrupt()
