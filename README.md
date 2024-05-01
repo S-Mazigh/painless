@@ -37,6 +37,7 @@ Content
 To compile the project
 ----------------------
 * Must install an MPI implementation, painless was tested with [OpenMpi](https://www.open-mpi.org/). 
+* Requires [Protobuf](https://protobuf.dev/) to be installed with its compiler and--('') shared library.
 
 * In the main directory use 'make' to compile the code.
 

@@ -17,12 +17,6 @@ void Parameters::init(int argc, char **argv)
       if (arg[0] != '-' && filename == NULL)
       {
          filename = arg;
-         // Check if the file exists
-         if (!std::filesystem::exists(filename))
-         {
-            LOGERROR("Error: File '%s' not found",filename);
-            exit(PERR_ARGS_ERROR); // Or handle the error appropriately
-         }
 
          continue;
       }
@@ -42,6 +36,13 @@ void Parameters::init(int argc, char **argv)
 
          params[left] = right;
       }
+   }
+
+   // Check if the file exists only in non dist for now
+   if (!Parameters::getBoolParam("dist") && !std::filesystem::exists(filename))
+   {
+      LOGERROR("Error: File '%s' not found", filename);
+      exit(PERR_ARGS_ERROR); // Or handle the error appropriately
    }
 
    if (getFilename() == NULL || getBoolParam("h"))
