@@ -76,6 +76,11 @@ void SolverFactory::diversification(const std::vector<std::shared_ptr<SolverCdcl
 void SolverFactory::createSolver(char type, std::vector<std::shared_ptr<SolverCdclInterface>> &cdclSolvers, std::vector<std::shared_ptr<LocalSearchSolver>> &localSolvers)
 {
    int id = currentIdSolver.fetch_add(1);
+   if(id >= cpus)
+   {
+      LOGWARN("Solver of type '%c' will not be instantiated, the number of solvers %d reached the maximum %d.", type, id, cpus);
+      return;
+   }
    switch (type)
    {
 #ifdef GLUCOSE_

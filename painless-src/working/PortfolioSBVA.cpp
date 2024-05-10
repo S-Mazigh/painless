@@ -4,6 +4,7 @@
 #include "utils/Logger.h"
 #include "utils/ErrorCodes.h"
 #include "utils/System.h"
+#include "utils/MpiUtils.h"
 
 #include "working/PortfolioSBVA.h"
 #include "working/SequentialWorker.h"
@@ -157,12 +158,14 @@ void PortfolioSBVA::solve(const std::vector<int> &cube)
          this->sbvas.back()->diversify(engine, uniform);
       }
    }
-   else if (1 == nbSBVA)
+   else if (1 == nbSBVA && (MemInfo::getAvailableMemory() > approxMemoryPerSolver))
    {
       this->sbvas.emplace_back(new StructuredBVA(initNbSlaves));
       this->sbvas.back()->setTieBreakHeuristic(SBVATieBreak::MOSTOCCUR); /* THREEHOPS uses too much memory */
       /* Do not call diversify */
-   } // else no sbva
+   } else {
+      LOG("No SBVA will be executed");
+   }
 
    /* Diversification must be done before addInitialClauses because of kissat_reserve (options changes the required memory) */
    /* Do not diversify localSearch not even srand */
@@ -171,7 +174,7 @@ void PortfolioSBVA::solve(const std::vector<int> &cube)
    /* Load clauses */
    for (auto cdclSolver : cdclSolvers)
    {
-      working->addSlave(new SequentialWorker(cdclSolver));
+      this->addSlave(new SequentialWorker(cdclSolver));
       clausesLoad.emplace_back(&SolverCdclInterface::addInitialClauses, cdclSolver.get(), std::ref(this->initClauses), this->beforeSbvaVarCount);
    }
 
@@ -248,6 +251,7 @@ void PortfolioSBVA::solve(const std::vector<int> &cube)
       auto ret = this->sbvaSignal.wait_for(lock, std::chrono::seconds(sbvaTimeout));
       LOGWARN("Portfolio SBVA wakeupRet = %d , globalEnding = %d ", ret, globalEnding.load());
    }
+
    /* no else to execute after wakeup */
    if (globalEnding)
    {

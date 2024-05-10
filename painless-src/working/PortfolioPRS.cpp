@@ -61,9 +61,8 @@ void PortfolioPRS::solve(const std::vector<int> &cube)
    unsigned varCount;
    int res;
 
-   int nbKissat = (cpus > 9) ? 9 : cpus;
-   int nbGaspi = (cpus - nbKissat > 5) ? 5 : (cpus - nbKissat > 0) ? cpus - nbKissat
-                                                                   : 0;
+   int nbKissat = 4;
+   int nbGaspi = 3;
 
    strategyEnding = false;
 
@@ -121,14 +120,13 @@ void PortfolioPRS::solve(const std::vector<int> &cube)
       SolverFactory::createSolver('k', cdclSolvers, localSolvers);
    for (int i = 0; i < nbGaspi; i++)
       SolverFactory::createSolver('K', cdclSolvers, localSolvers);
+
    // one yalsat or kissat_mab
-   if (cpus > nbGaspi + nbKissat)
-   {
-      if (initClauses.size() < 30 * MILLION)
-         SolverFactory::createSolver('y', cdclSolvers, localSolvers);
-      else
-         SolverFactory::createSolver('k', cdclSolvers, localSolvers);
-   }
+   if (initClauses.size() < 30 * MILLION && mpi_rank % 2)
+      SolverFactory::createSolver('y', cdclSolvers, localSolvers);
+   else
+      SolverFactory::createSolver('k', cdclSolvers, localSolvers);
+
    SolverFactory::diversification(cdclSolvers, localSolvers, Parameters::getBoolParam("dist"), mpi_rank, world_size);
 
    for (auto cdcl : cdclSolvers)
@@ -145,7 +143,6 @@ void PortfolioPRS::solve(const std::vector<int> &cube)
 
    if (dist)
    {
-      // this->globalDatabase->setMaxVar(this->beforeSbvaVarCount); // doesn't make the use of asynchronous sbva correct (all processes must choose same config: no local search)
       /* Init LocalStrategy */
       SharingStrategyFactory::instantiateLocalStrategies(Parameters::getIntParam("shr-strat", 1), this->localStrategies, {this->globalDatabase}, cdclSolvers);
       /* Init GlobalStrategy */
@@ -250,7 +247,7 @@ void PortfolioPRS::restoreModelDist()
    for (int i = 0; i < this->sharers.size(); i++)
       sharers[i]->join();
 
-   LOGDEBUG1("Restoring Dist Model mpi_winner=%d, finalResult=%d", mpi_winner, finalResult);
+   LOG1("Restoring Dist Model mpi_winner=%d, finalResult=%d", mpi_winner, finalResult);
 
    if (mpi_winner == 0 || finalResult != SatResult::SAT)
       return;
@@ -259,7 +256,7 @@ void PortfolioPRS::restoreModelDist()
 
    if (mpi_rank == mpi_winner)
    {
-      LOGDEBUG1("Winner %d sending model of size %d", mpi_winner, finalModel.size());
+      LOG1("Winner %d sending model of size %d", mpi_winner, finalModel.size());
       MPI_Send(finalModel.data(), finalModel.size(), MPI_INT, 0, MYMPI_MODEL, MPI_COMM_WORLD);
    }
 
@@ -277,7 +274,7 @@ void PortfolioPRS::restoreModelDist()
       finalModel.resize(size);
 
       MPI_Recv(finalModel.data(), size, MPI_INT, mpi_winner, MYMPI_MODEL, MPI_COMM_WORLD, &status);
-      LOGDEBUG1("Root received a model of size %d", size);
+      LOG1("Root received a model of size %d", size);
       this->prs.restoreModel(finalModel);
    }
 

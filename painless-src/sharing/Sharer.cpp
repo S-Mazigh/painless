@@ -33,7 +33,6 @@
 void *mainThrSharing(void *arg)
 {
    Sharer *shr = (Sharer *)arg;
-   usleep(Parameters::getIntParam("init-sleep", 0));
 
    int round = 0;
    int nbStrats = shr->sharingStrategies.size();
@@ -42,14 +41,13 @@ void *mainThrSharing(void *arg)
    double sharingTime = 0;
    int wakeupRet = 0;
    timespec sleepTimeSpec;
-   getTimeSpecMicro(sleepTime, &sleepTimeSpec);
    timespec timespecCond;
-   usleep(Parameters::getIntParam("init-sleep", 1000));
+
+   getTimeSpecMicro(sleepTime, &sleepTimeSpec);
+   usleep(Parameters::getIntParam("init-sleep", 10000)*shr->id); /* attempt to desync when there are multiple sharers */
    LOG1("Sharer %d will start now", shr->id);
 
    bool can_break = false;
-
-   // SharingStatistics stats;
 
    while (!can_break)
    {
@@ -76,7 +74,7 @@ void *mainThrSharing(void *arg)
       }
 
       round++; // New round
-      shr->totalSharingTime +=sharingTime;
+      shr->totalSharingTime += sharingTime;
    }
 
    // Removed strategy that ended
@@ -88,7 +86,8 @@ void *mainThrSharing(void *arg)
    // Launch a final doSharing to make the other strategies finalize correctly (removed from the previous while(1) to lessen ifs)
    for (int i = 0; i < nbStrats; i++)
    {
-      if(i == lastStrategy) continue;
+      if (i == lastStrategy)
+         continue;
       LOG3("Sharer %d will end strategy %d", shr->id, i);
       if (!shr->sharingStrategies[i]->doSharing())
       {
