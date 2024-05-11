@@ -28,6 +28,10 @@
 #include "sharing/GlobalDatabase.h"
 #include "sharing/LocalStrategies/LocalSharingStrategy.h"
 #include "sharing/GlobalStrategies/GlobalSharingStrategy.h"
+#include "preprocessors/StructuredBva.hpp"
+
+#include <mutex>
+#include <condition_variable>
 
 class PortfolioPRS : public WorkingStrategy
 {
@@ -55,6 +59,9 @@ protected:
    // Workers
    //--------
    preprocess prs{-1};
+   StructuredBVA sbva{-1};
+   std::mutex sbvaLock;
+   std::condition_variable sbvaSignal;
 
    // Sharing
    //--------

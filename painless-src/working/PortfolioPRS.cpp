@@ -103,9 +103,42 @@ void PortfolioPRS::solve(const std::vector<int> &cube)
       // PRS uses indexes from 1 to prs.clauses
       initClauses = std::move(prs.clause);
       initClauses.erase(initClauses.begin());
+
+      if (initClauses.size() < 10 * MILLION)
+      {
+         std::thread sbvaRunner([this, &initClauses]()
+                                {
+            this->sbva.setTieBreakHeuristic(SBVATieBreak::MOSTOCCUR);
+            this->sbva.printParameters();
+            this->sbva.addInitialClauses(initClauses, this->prs.vars);
+            this->sbva.run();
+            // sbva->printStatistics();
+            
+            LOG2("Sbva %d ended", this->sbva.id);
+            
+            this->sbva.printStatistics();
+
+            // Notify the caller that the task is completed
+            std::lock_guard<std::mutex> lock(this->sbvaLock);
+            this->sbvaSignal.notify_one(); });
+
+         {
+            std::unique_lock<std::mutex> lock(this->sbvaLock);
+            auto ret = this->sbvaSignal.wait_for(lock, std::chrono::seconds(Parameters::getIntParam("sbva-timeout", 10)));
+            LOGWARN("Portfolio PRS wakeupRet = %d , globalEnding = %d ", ret, globalEnding.load());
+            this->sbva.setInterrupt();
+         }
+         sbvaRunner.join();
+
+         if (sbva.isInitialized())
+         {
+            initClauses = sbva.getClauses();
+            varCount = sbva.getVariablesCount();
+         }
+      }
    }
 
-   if(dist)
+   if (dist)
       TESTRUNMPI(MPI_Bcast(&receivedFinalResultBcast, 1, MPI_INT, 0, MPI_COMM_WORLD));
 
    if (receivedFinalResultBcast != 0)
@@ -117,7 +150,7 @@ void PortfolioPRS::solve(const std::vector<int> &cube)
    }
 
    // Send instance via MPI from leader 0 to workers.
-   if(dist)
+   if (dist)
       sendFormula(initClauses, &varCount, 0);
 
    /* ~solver mem + learned clauses ~= reduction_ratio*PRS memory : this is a vague approximation! TODO enhance the solverFactory */
@@ -145,8 +178,7 @@ void PortfolioPRS::solve(const std::vector<int> &cube)
       if (MemInfo::getAvailableMemory() <= i * approxMemoryPerSolver)
       {
          LOGERROR("SolverFactory cannot instantiate the %d th Gaspi (%f/%f) due to insufficient memory (to be used: %f / %f)", i, i * approxMemoryPerSolver, MemInfo::getAvailableMemory(), MemInfo::getUsedMemory() + i * approxMemoryPerSolver, MemInfo::getTotalMemory());
-         nbKissat = i;
-         nbGaspi = 0;
+         nbGaspi = i;
          break;
       }
       SolverFactory::createSolver('K', cdclSolvers, localSolvers);
@@ -275,7 +307,7 @@ void PortfolioPRS::join(WorkingStrategy *strat, SatResult res,
    }
 
    for (int i = 0; i < this->sharers.size(); i++)
-         this->sharers[i]->printStats();
+      this->sharers[i]->printStats();
    this->globalDatabase->printStats();
 }
 
@@ -312,6 +344,8 @@ void PortfolioPRS::restoreModelDist()
 
       MPI_Recv(finalModel.data(), size, MPI_INT, mpi_winner, MYMPI_MODEL, MPI_COMM_WORLD, &status);
       LOG1("Root received a model of size %d", size);
+
+      finalModel.resize(this->prs.vars); /* remove BVA new variables */
       this->prs.restoreModel(finalModel);
    }
 
