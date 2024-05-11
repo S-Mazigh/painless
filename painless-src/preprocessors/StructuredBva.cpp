@@ -32,6 +32,7 @@ StructuredBVA::StructuredBVA(int _id) : Entity(_id)
     this->tieBreakHeuristic = SBVATieBreak::THREEHOPS;
     this->breakTie = std::bind(&StructuredBVA::threeHopTieBreak, this, std::placeholders::_1, std::placeholders::_2);
     this->shuffleTies = false;
+    this->stopPreprocessing = false;
 
     /* Stats */
     this->varCount = 0;

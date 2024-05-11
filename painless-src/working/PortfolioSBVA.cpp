@@ -28,6 +28,7 @@ void runSBVA(char *filename, std::mt19937 &engine, std::uniform_int_distribution
    {
       LOGWARN("SBVA %d was not initialized in time thus returning !", sbva->getId());
       master->joinSbva();
+      return;
    }
 
    sbva->run();
@@ -129,19 +130,19 @@ void PortfolioSBVA::solve(const std::vector<int> &cube)
       LOGWARN("Too much clauses, sbva will be used only for one kissat with timeout %d. No Yalsat will be instantiated", sbvaTimeout);
    }
 
-   LOGDEBUG1("Memory : %f", MemInfo::getUsedMemory());
+   /* ~solver mem + learned clauses ~= 0.5*PRS memory : this is a vague approximation! TODO enhance the solverFactory */
+   double approxMemoryPerSolver = 0.5 * MemInfo::getUsedMemory();
 
-   /* ~solver mem + learned clauses ~= PRS memory */
-   double approxMemoryPerSolver = MemInfo::getUsedMemory();
+   LOGDEBUG1("Memory : %f", approxMemoryPerSolver);
 
    // Add initial slaves
    for (int i = 1; i <= initNbSlaves; i++)
    {
       /* i * solverMem */
-      LOGDEBUG1("Memory: %f / %f. %f / %f", MemInfo::getUsedMemory() + i * approxMemoryPerSolver, MemInfo::getTotalMemory(),  i * approxMemoryPerSolver, MemInfo::getAvailableMemory());
+      LOGDEBUG1("Memory: %f / %f. %f / %f", MemInfo::getUsedMemory() + i * approxMemoryPerSolver, MemInfo::getTotalMemory(), i * approxMemoryPerSolver, MemInfo::getAvailableMemory());
       if (MemInfo::getAvailableMemory() <= i * approxMemoryPerSolver)
       {
-         LOGERROR("SolverFactory cannot instantiate the %d th solver (%f/%f) due to insufficient memory (to be used: %f / %f)", i,i * approxMemoryPerSolver, MemInfo::getAvailableMemory(), MemInfo::getUsedMemory() + i * approxMemoryPerSolver, MemInfo::getTotalMemory());
+         LOGERROR("SolverFactory cannot instantiate the %d th solver (%f/%f) due to insufficient memory (to be used: %f / %f)", i, i * approxMemoryPerSolver, MemInfo::getAvailableMemory(), MemInfo::getUsedMemory() + i * approxMemoryPerSolver, MemInfo::getTotalMemory());
          initNbSlaves = i;
          nbSBVA = 0;
          nbLs = 0;
@@ -163,7 +164,10 @@ void PortfolioSBVA::solve(const std::vector<int> &cube)
       this->sbvas.emplace_back(new StructuredBVA(initNbSlaves));
       this->sbvas.back()->setTieBreakHeuristic(SBVATieBreak::MOSTOCCUR); /* THREEHOPS uses too much memory */
       /* Do not call diversify */
-   } else {
+   }
+   else
+   {
+      nbSBVA = 0;
       LOG("No SBVA will be executed");
    }
 
@@ -244,7 +248,7 @@ void PortfolioSBVA::solve(const std::vector<int> &cube)
       return;
    }
 
-   /* All this is because I didn't want to change SequentialWorker or make SBVA inherits SolverInterface: big changes are coming */
+   /* All this exists because I didn't want to change SequentialWorker or make SBVA inherits SolverInterface: big changes are coming */
    if (!globalEnding)
    {
       std::unique_lock<std::mutex> lock(this->sbvaLock);
