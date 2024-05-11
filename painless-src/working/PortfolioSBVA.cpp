@@ -70,6 +70,8 @@ void PortfolioSBVA::solve(const std::vector<int> &cube)
 {
    LOG(">> PortfolioSBVA");
 
+   double approxMemoryPerSolver;
+
    // Timeout management
    unsigned sbvaTimeout = Parameters::getIntParam("sbva-timeout", 500);
 
@@ -91,6 +93,8 @@ void PortfolioSBVA::solve(const std::vector<int> &cube)
    this->strategyEnding = false;
 
    // parseFormula(Parameters::getFilename(), this->initClauses, &this->beforeSbvaVarCount);
+
+   LOG1("Memory 1: %f", MemInfo::getUsedMemory());
 
    /* PRS */
    int res = prs.do_preprocess(Parameters::getFilename());
@@ -116,6 +120,8 @@ void PortfolioSBVA::solve(const std::vector<int> &cube)
    // Free some memory
    this->prs.release_most();
 
+   LOG1("Memory 2: %f", MemInfo::getUsedMemory());
+
    // PRS uses indexes from 1 to prs.clauses
    this->initClauses = std::move(prs.clause);
    this->initClauses.erase(this->initClauses.begin());
@@ -130,10 +136,11 @@ void PortfolioSBVA::solve(const std::vector<int> &cube)
       LOGWARN("Too much clauses, sbva will be used only for one kissat with timeout %d. No Yalsat will be instantiated", sbvaTimeout);
    }
 
-   /* ~solver mem + learned clauses ~= 0.5*PRS memory : this is a vague approximation! TODO enhance the solverFactory */
-   double approxMemoryPerSolver = 0.5 * MemInfo::getUsedMemory();
+   /* ~solver mem + learned clauses ~= reduction_ratio*PRS memory : this is a vague approximation! TODO enhance the solverFactory */
+   double reductionRatio = (((double)prs.vars / prs.orivars) * ((double)prs.clauses / prs.oriclauses));
+   approxMemoryPerSolver = 1.2 * reductionRatio * MemInfo::getUsedMemory();
 
-   LOGDEBUG1("Memory : %f", approxMemoryPerSolver);
+   LOG1("Reduction Ratio: %f, Memory : %f", reductionRatio, approxMemoryPerSolver);
 
    // Add initial slaves
    for (int i = 1; i <= initNbSlaves; i++)
@@ -187,7 +194,6 @@ void PortfolioSBVA::solve(const std::vector<int> &cube)
 
    if (dist)
    {
-      // this->globalDatabase->setMaxVar(this->beforeSbvaVarCount); // doesn't make the use of asynchronous sbva correct (all processes must choose same config: no local search)
       /* Init LocalStrategy */
       SharingStrategyFactory::instantiateLocalStrategies(Parameters::getIntParam("shr-strat", 1), this->localStrategies, {this->globalDatabase}, cdclSolvers);
       /* Init GlobalStrategy */
