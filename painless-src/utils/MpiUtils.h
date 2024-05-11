@@ -12,14 +12,14 @@
 
 #define COLOR_YES 10
 
-#define TESTRUNMPI(func)           \
-    do                             \
-    {                              \
-        if (func != MPI_SUCCESS)   \
-        {                          \
-            LOGERROR("MPI ERROR"); \
-            exit(PERR_MPI);        \
-        }                          \
+#define TESTRUNMPI(func)                 \
+    do                                   \
+    {                                    \
+        if (dist && func != MPI_SUCCESS) \
+        {                                \
+            LOGERROR("MPI ERROR");       \
+            exit(PERR_MPI);              \
+        }                                \
     } while (0)
 
 /// @brief Mpi rank of this process

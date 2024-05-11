@@ -96,6 +96,7 @@ void SharingStrategyFactory::instantiateGlobalStrategies(int strategyNumber, con
             LOGERROR("The global sharing strategy %d wasn't able to initalize its MPI variables", i);
             TESTRUNMPI(MPI_Finalize());
             dist = false;
+            globalStrategies.erase(globalStrategies.begin()+i);
         }
     }
 

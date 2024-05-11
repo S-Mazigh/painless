@@ -231,5 +231,5 @@ int main(int argc, char **argv)
       LOGSTAT("Memory used %f Ko", MemInfo::getUsedMemory());
       return finalResult;
    }
-   return finalResult;
+   return 0;
 }

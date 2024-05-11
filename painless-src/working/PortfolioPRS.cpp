@@ -105,7 +105,8 @@ void PortfolioPRS::solve(const std::vector<int> &cube)
       initClauses.erase(initClauses.begin());
    }
 
-   MPI_Bcast(&receivedFinalResultBcast, 1, MPI_INT, 0, MPI_COMM_WORLD);
+   if(dist)
+      TESTRUNMPI(MPI_Bcast(&receivedFinalResultBcast, 1, MPI_INT, 0, MPI_COMM_WORLD));
 
    if (receivedFinalResultBcast != 0)
    {
@@ -116,7 +117,8 @@ void PortfolioPRS::solve(const std::vector<int> &cube)
    }
 
    // Send instance via MPI from leader 0 to workers.
-   sendFormula(initClauses, &varCount, 0);
+   if(dist)
+      sendFormula(initClauses, &varCount, 0);
 
    /* ~solver mem + learned clauses ~= reduction_ratio*PRS memory : this is a vague approximation! TODO enhance the solverFactory */
    double reductionRatio = (((double)prs.vars / prs.orivars) * ((double)prs.clauses / prs.oriclauses));
@@ -184,6 +186,16 @@ void PortfolioPRS::solve(const std::vector<int> &cube)
 
    std::vector<std::shared_ptr<SharingStrategy>> sharingStrategiesConcat;
 
+   sharingStrategiesConcat.clear();
+
+   // Wait for clauses init
+   for (auto &worker : clausesLoad)
+      worker.join();
+
+   clausesLoad.clear();
+
+   LOG1("All solvers loaded the clauses");
+
    /* Launch sharers */
    for (auto lstrat : localStrategies)
    {
@@ -195,14 +207,6 @@ void PortfolioPRS::solve(const std::vector<int> &cube)
    }
 
    SharingStrategyFactory::launchSharers(sharingStrategiesConcat, this->sharers);
-
-   sharingStrategiesConcat.clear();
-
-   // Wait for clauses init
-   for (auto &worker : clausesLoad)
-      worker.join();
-
-   clausesLoad.clear();
 
    if (globalEnding)
    {
@@ -269,6 +273,10 @@ void PortfolioPRS::join(WorkingStrategy *strat, SatResult res,
    { // Else forward the information to the parent strategy
       parent->join(this, res, model);
    }
+
+   for (int i = 0; i < this->sharers.size(); i++)
+         this->sharers[i]->printStats();
+   this->globalDatabase->printStats();
 }
 
 void PortfolioPRS::restoreModelDist()

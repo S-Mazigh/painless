@@ -199,7 +199,7 @@ force_restart_before_reduction(kissat *solver)
     return;
   if (!solver->stable && (GET_OPTION(reducerestart) < 2))
     return;
-  printf("\nbegin force res\n");
+  // printf("\nbegin force res\n");
   kissat_restart_and_flush_trail(solver);
 }
 
