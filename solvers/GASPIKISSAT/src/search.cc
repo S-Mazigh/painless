@@ -185,14 +185,14 @@ int kissat_saga_initialization(kissat *solver)
   Solution sol = solver->ga->solve();
   kissat_section(solver, "Genetic Algorithm Initialization");
   printf("c GASPI options: Population: %d, Generations: %d, Mutations: %f, Crossover: %f\n", solver->population_size, solver->max_generations, solver->mutation_rate, solver->crossover_rate);
-  std::cout << "c  Best fitness: " << sol.getFitness() << "\n";
+  // std::cout << "c  Best fitness: " << sol.getFitness() << "\n";
   initialize_polarity(sol, solver);
   if (sol.getFitness() == 0)
   {
-    std::cout << "c  Solved by SAGA                                                                       \n";
+    // std::cout << "c  Solved by SAGA                                                                       \n";
   }
   #ifndef QUIET
-  std::cout << "c  SAGA time: " << kissat_process_time() - start << " s\n";
+  // std::cout << "c  SAGA time: " << kissat_process_time() - start << " s\n";
   #endif
   RELEASE_STACK(solver->original);
   return 0;

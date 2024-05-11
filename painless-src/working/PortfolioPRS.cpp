@@ -57,6 +57,8 @@ void PortfolioPRS::solve(const std::vector<int> &cube)
    std::vector<std::shared_ptr<SolverCdclInterface>> cdclSolvers;
    std::vector<std::shared_ptr<LocalSearchSolver>> localSolvers;
 
+   double approxMemoryPerSolver;
+
    int receivedFinalResultBcast;
    unsigned varCount;
    int res;
@@ -116,15 +118,42 @@ void PortfolioPRS::solve(const std::vector<int> &cube)
    // Send instance via MPI from leader 0 to workers.
    sendFormula(initClauses, &varCount, 0);
 
-   for (int i = 0; i < nbKissat; i++)
+   /* ~solver mem + learned clauses ~= reduction_ratio*PRS memory : this is a vague approximation! TODO enhance the solverFactory */
+   double reductionRatio = (((double)prs.vars / prs.orivars) * ((double)prs.clauses / prs.oriclauses));
+   approxMemoryPerSolver = 1.2 * reductionRatio * MemInfo::getUsedMemory();
+
+   LOG1("Reduction Ratio: %f, Memory : %f", reductionRatio, approxMemoryPerSolver);
+
+   for (int i = 1; i <= nbKissat; i++)
+   {
+      LOGDEBUG1("Memory: %f / %f. %f / %f", MemInfo::getUsedMemory() + i * approxMemoryPerSolver, MemInfo::getTotalMemory(), i * approxMemoryPerSolver, MemInfo::getAvailableMemory());
+      if (MemInfo::getAvailableMemory() <= i * approxMemoryPerSolver)
+      {
+         LOGERROR("SolverFactory cannot instantiate the %d th kissat (%f/%f) due to insufficient memory (to be used: %f / %f)", i, i * approxMemoryPerSolver, MemInfo::getAvailableMemory(), MemInfo::getUsedMemory() + i * approxMemoryPerSolver, MemInfo::getTotalMemory());
+         nbKissat = i;
+         nbGaspi = 0;
+         break;
+      }
       SolverFactory::createSolver('k', cdclSolvers, localSolvers);
-   for (int i = 0; i < nbGaspi; i++)
+   }
+
+   for (int i = 1; i <= nbGaspi; i++)
+   {
+      LOGDEBUG1("Memory: %f / %f. %f / %f", MemInfo::getUsedMemory() + i * approxMemoryPerSolver, MemInfo::getTotalMemory(), i * approxMemoryPerSolver, MemInfo::getAvailableMemory());
+      if (MemInfo::getAvailableMemory() <= i * approxMemoryPerSolver)
+      {
+         LOGERROR("SolverFactory cannot instantiate the %d th Gaspi (%f/%f) due to insufficient memory (to be used: %f / %f)", i, i * approxMemoryPerSolver, MemInfo::getAvailableMemory(), MemInfo::getUsedMemory() + i * approxMemoryPerSolver, MemInfo::getTotalMemory());
+         nbKissat = i;
+         nbGaspi = 0;
+         break;
+      }
       SolverFactory::createSolver('K', cdclSolvers, localSolvers);
+   }
 
    // one yalsat or kissat_mab
-   if (initClauses.size() < 30 * MILLION && mpi_rank % 2)
+   if (initClauses.size() < 30 * MILLION && mpi_rank % 2 && (MemInfo::getAvailableMemory() > approxMemoryPerSolver))
       SolverFactory::createSolver('y', cdclSolvers, localSolvers);
-   else
+   else if (MemInfo::getAvailableMemory() > approxMemoryPerSolver)
       SolverFactory::createSolver('k', cdclSolvers, localSolvers);
 
    SolverFactory::diversification(cdclSolvers, localSolvers, Parameters::getBoolParam("dist"), mpi_rank, world_size);

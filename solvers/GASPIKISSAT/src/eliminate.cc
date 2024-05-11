@@ -157,7 +157,7 @@ void kissat_flush_units_while_connected(kissat *solver)
     CHECK_AND_ADD_EMPTY();
     ADD_EMPTY_TO_PROOF();
     solver->inconsistent = true;
-    std::cout << "c proof empty clause; Dans eliminate.cc::kissat_flush_units_while_connected" << std::endl;
+    // std::cout << "c proof empty clause; Dans eliminate.cc::kissat_flush_units_while_connected" << std::endl;
     return;
   }
 
@@ -228,7 +228,7 @@ connect_resolvents(kissat *solver)
           CHECK_AND_ADD_EMPTY();
           ADD_EMPTY_TO_PROOF();
           solver->inconsistent = true;
-          std::cout << "c proof empty clause; Dans eliminate.cc::connect_resolvents" << std::endl;
+          // std::cout << "c proof empty clause; Dans eliminate.cc::connect_resolvents" << std::endl;
           break;
         }
         else if (size == 1)
