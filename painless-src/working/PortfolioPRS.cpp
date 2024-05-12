@@ -136,6 +136,12 @@ void PortfolioPRS::solve(const std::vector<int> &cube)
             varCount = sbva.getVariablesCount();
          }
       }
+
+      /* ~solver mem + learned clauses ~= reduction_ratio*PRS memory : this is a vague approximation! TODO enhance the solverFactory */
+      double reductionRatio = (((double)prs.vars / prs.orivars) * ((double)prs.clauses / prs.oriclauses));
+      approxMemoryPerSolver = 1.2 * reductionRatio * MemInfo::getUsedMemory();
+
+      LOG1("Reduction Ratio: %f", reductionRatio);
    }
 
    if (dist)
@@ -151,13 +157,12 @@ void PortfolioPRS::solve(const std::vector<int> &cube)
 
    // Send instance via MPI from leader 0 to workers.
    if (dist)
+   {
+      TESTRUNMPI(MPI_Bcast(&approxMemoryPerSolver, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD));
       sendFormula(initClauses, &varCount, 0);
+   }
 
-   /* ~solver mem + learned clauses ~= reduction_ratio*PRS memory : this is a vague approximation! TODO enhance the solverFactory */
-   double reductionRatio = (((double)prs.vars / prs.orivars) * ((double)prs.clauses / prs.oriclauses));
-   approxMemoryPerSolver = 1.2 * reductionRatio * MemInfo::getUsedMemory();
-
-   LOG1("Reduction Ratio: %f, Memory : %f", reductionRatio, approxMemoryPerSolver);
+   LOG1("ApproxMemory : %f", approxMemoryPerSolver);
 
    for (int i = 1; i <= nbKissat; i++)
    {
