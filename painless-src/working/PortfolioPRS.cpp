@@ -64,7 +64,7 @@ void PortfolioPRS::solve(const std::vector<int> &cube)
 
    double approxMemoryPerSolver;
 
-   int receivedFinalResultBcast;
+   int receivedFinalResultBcast = 0;
    unsigned varCount;
    int res;
 
@@ -84,7 +84,6 @@ void PortfolioPRS::solve(const std::vector<int> &cube)
          LOG("PRS answered UNSAT");
          finalResult = SatResult::UNSAT;
          this->join(this, finalResult, {});
-         return;
       }
       else if (10 == res)
       {
@@ -95,10 +94,12 @@ void PortfolioPRS::solve(const std::vector<int> &cube)
          }
          finalResult = SatResult::SAT;
          this->join(this, finalResult, finalModel);
-         return;
       }
 
       receivedFinalResultBcast = finalResult;
+
+      if (receivedFinalResultBcast != 0)
+         goto prs_sync;
 
       // Free some memory
       prs.release_most();
@@ -150,14 +151,19 @@ void PortfolioPRS::solve(const std::vector<int> &cube)
       LOG1("Reduction Ratio: %f", reductionRatio);
    }
 
+prs_sync:
    if (dist)
       TESTRUNMPI(MPI_Bcast(&receivedFinalResultBcast, 1, MPI_INT, 0, MPI_COMM_WORLD));
 
    if (receivedFinalResultBcast != 0)
    {
-      finalResult = static_cast<SatResult>(receivedFinalResultBcast);
       mpi_winner = 0;
+      globalEnding = 1;
+      finalResult = static_cast<SatResult>(receivedFinalResultBcast);
       LOGDEBUG1("[PRS] It is the mpi end: %d", finalResult);
+      pthread_mutex_lock(&mutexGlobalEnd);
+      pthread_cond_broadcast(&condGlobalEnd);
+      pthread_mutex_unlock(&mutexGlobalEnd);
       return;
    }
 
