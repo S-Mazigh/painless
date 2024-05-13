@@ -161,7 +161,7 @@ for f in $(cat ${input_files}); do
             ((nbTIMEOUT++))
             ;;
         "SATISFIABLE")
-            mypar2=$time_spent
+            mypar2=$time_spent_bash
             ((nbSAT++))
             output=$($script_dir/SAT "$f" "$output_file" 2>&1)
             last_line=$(echo "$output" | tail -n 1)
@@ -178,7 +178,7 @@ for f in $(cat ${input_files}); do
             fi
             ;;
         "UNSATISFIABLE")
-            mypar2=$time_spent
+            mypar2=$time_spent_bash
             ((nbUNSAT++))
             ;;
         *)

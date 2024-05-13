@@ -48,7 +48,7 @@ def print_average_time_and_myPar2(data):
         print()
 
 def draw_graph(data):
-    timeout = 50  # Set timeout value
+    timeout = 5000  # Set timeout value
     plt.figure(dpi=300)
     
     markers = ['o', 'v', '^', 'd', 's', 'p', '*', 'h', 'H', '1', '2', '3', '<', '4', '>', '+', 'x', 'D', '|', '_', 'P', 'X', '8']
@@ -83,8 +83,8 @@ def draw_graph(data):
 
     plt.ylim(0, None)
     plt.xlim(0, timeout)
-    plt.xlabel("Number of resolved instances")
-    plt.ylabel("Execution Time (s)")
+    plt.ylabel("Number of resolved instances")
+    plt.xlabel("Execution Time (s)")
     plt.legend(title="Instances")
     plt.title("")
     plt.grid(True)
@@ -111,10 +111,6 @@ if __name__ == "__main__":
         print()
 
     if check(data):
-        print("All directories have the same number of rows.")
         print_average_time_and_myPar2(data)
         draw_graph(data)
-    else:
-        print("Some directories have different numbers of rows.")
-
     
