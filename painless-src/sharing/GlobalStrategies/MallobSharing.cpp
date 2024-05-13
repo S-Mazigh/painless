@@ -126,6 +126,9 @@ bool MallobSharing::doSharing()
     }
     else // leaf
     {
+        this->totalSize = nb_buffers_aggregated * pow(0.875, log2(nb_buffers_aggregated)) * defaultSize;
+        LOG2("[Mallob] TotalSize = %d(%d)", totalSize, nb_buffers_aggregated);
+        
         gstats.sharedClauses += serializeClauses(my_clauses_buffer);
         my_clauses_buffer.push_back(nb_buffers_aggregated); // number of buffers aggregated
 
@@ -180,9 +183,9 @@ int MallobSharing::serializeClauses(std::vector<int> &serialized_v_cls)
     int clausesSelected = 0;
     std::shared_ptr<ClauseExchange> tmp_cls;
 
-    BloomFilter b_filter;
-
     unsigned dataCount = serialized_v_cls.size(); // it is an append operation so datacount do not start from zero
+
+    LOGDEBUG1("Serializing my local clauses, dataCount = %u, totalSize = %u", dataCount, totalSize);
 
     while (dataCount < totalSize && globalDatabase->getClauseToSend(tmp_cls))
     {
@@ -229,6 +232,8 @@ void MallobSharing::deserializeClauses(std::vector<int> &serialized_v_cls, bool 
     const unsigned source_id = globalDatabase->getId();
     const unsigned buffer_size = serialized_v_cls.size();
     std::shared_ptr<ClauseExchange> p_cls;
+
+    LOGDEBUG1("Deserializing vector of size %u", buffer_size);
 
     for (int i = 0; i < buffer_size; i++)
     {

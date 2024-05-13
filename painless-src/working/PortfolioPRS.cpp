@@ -35,13 +35,18 @@ PortfolioPRS::PortfolioPRS()
    if (dist)
    {
       int maxClauseSize = Parameters::getIntParam("maxClauseSize", 50);
-      this->globalDatabase = std::make_shared<GlobalDatabase>(currentIdSolver.fetch_add(1), std::make_shared<ClauseDatabaseLockFree>(maxClauseSize), std::make_shared<ClauseDatabaseLockFree>(maxClauseSize));
+      /* The ids are to be managed separately, idDiversification, and idSharingEntity, Temp: cpus is surely not used by the solvers */
+      this->globalDatabase = std::make_shared<GlobalDatabase>(cpus, std::make_shared<ClauseDatabaseLockFree>(maxClauseSize), std::make_shared<ClauseDatabaseLockFree>(maxClauseSize));
    }
 #endif
 }
 
 PortfolioPRS::~PortfolioPRS()
 {
+   for (int i = 0; i < this->sharers.size(); i++)
+      this->sharers[i]->printStats();
+   this->globalDatabase->printStats();
+
    for (size_t i = 0; i < slaves.size(); i++)
    {
       delete slaves[i];
@@ -132,8 +137,9 @@ void PortfolioPRS::solve(const std::vector<int> &cube)
 
          if (sbva.isInitialized())
          {
-            initClauses = sbva.getClauses();
+            initClauses = std::move(sbva.getClauses());
             varCount = sbva.getVariablesCount();
+            sbva.clearAll();
          }
       }
 
@@ -245,6 +251,9 @@ void PortfolioPRS::solve(const std::vector<int> &cube)
 
    SharingStrategyFactory::launchSharers(sharingStrategiesConcat, this->sharers);
 
+   for (int i = 0; i < this->sharers.size(); i++)
+      this->sharers[i]->setThreadAffinity(0);
+
    if (globalEnding)
    {
       this->setInterrupt();
@@ -310,10 +319,6 @@ void PortfolioPRS::join(WorkingStrategy *strat, SatResult res,
    { // Else forward the information to the parent strategy
       parent->join(this, res, model);
    }
-
-   for (int i = 0; i < this->sharers.size(); i++)
-      this->sharers[i]->printStats();
-   this->globalDatabase->printStats();
 }
 
 void PortfolioPRS::restoreModelDist()

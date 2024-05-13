@@ -42,11 +42,12 @@ void runSBVA(char *filename, std::mt19937 &engine, std::uniform_int_distribution
 
 PortfolioSBVA::PortfolioSBVA()
 {
+   /* All this dist mess is to be solved, this portfolio doesn't support dist, simpler is always better */
 #ifndef NDIST
    if (dist)
    {
       int maxClauseSize = Parameters::getIntParam("maxClauseSize", 50);
-      this->globalDatabase = std::make_shared<GlobalDatabase>(currentIdSolver.fetch_add(1), std::make_shared<ClauseDatabaseLockFree>(maxClauseSize), std::make_shared<ClauseDatabaseLockFree>(maxClauseSize));
+      this->globalDatabase = std::make_shared<GlobalDatabase>(cpus, std::make_shared<ClauseDatabaseLockFree>(maxClauseSize), std::make_shared<ClauseDatabaseLockFree>(maxClauseSize));
    }
 #endif
 }

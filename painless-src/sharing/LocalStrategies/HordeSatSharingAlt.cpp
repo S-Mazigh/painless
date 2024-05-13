@@ -245,7 +245,5 @@ void HordeSatSharingAlt::visit(SharingEntity *sh_entity)
 void HordeSatSharingAlt::visit(GlobalDatabase *g_base)
 {
    LOG4("[HordeAlt] Visiting the global database %d", g_base->id);
-
-   LOG2("[HordeAlt] Added %d clauses imported from another process", filtered.size());
 }
 #endif

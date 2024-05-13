@@ -89,6 +89,15 @@ public:
       pthread_join(myTid, NULL);
    }
 
+   void setThreadAffinity(int coreId)
+   {
+      cpu_set_t cpuset;
+      CPU_ZERO(&cpuset);
+      CPU_SET(coreId, &cpuset);
+
+      pthread_setaffinity_np(this->myTid, sizeof(cpu_set_t), &cpuset);
+   }
+
 protected:
    /// The id of the pthread.
    pthread_t myTid;

@@ -53,6 +53,11 @@ public:
        LOGDEBUG1("Sharer %d joined", id);
    }
 
+   inline void setThreadAffinity(int coreId)
+   {
+      this->sharer->setThreadAffinity(coreId);
+   }
+
 protected:
    /// Pointer to the thread in charge of sharing.
    Thread *sharer;
