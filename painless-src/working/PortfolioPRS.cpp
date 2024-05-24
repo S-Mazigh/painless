@@ -304,6 +304,7 @@ void PortfolioPRS::join(WorkingStrategy *strat, SatResult res,
 
          if (mpi_rank == 0)
          {
+            finalModel.resize(this->prs.vars);
             prs.restoreModel(finalModel);
          }
       }
