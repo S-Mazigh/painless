@@ -23,7 +23,7 @@
 #include "sharing/SharingEntityVisitor.h"
 
 // To include the real types
-#include "../solvers/SolverCdclInterface.hpp"
+#include "solvers/CDCL/SolverCdclInterface.hpp"
 #include "sharing/GlobalDatabase.h"
 #include "sharing/SharingEntity.hpp"
 

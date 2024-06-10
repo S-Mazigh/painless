@@ -20,7 +20,6 @@
 #pragma once
 
 #include "clauses/ClauseExchange.h"
-#include "sharing/SharingEntity.hpp"
 #include "utils/Logger.h"
 #include "utils/ClauseUtils.h"
 
@@ -29,12 +28,13 @@
 #include <vector>
 #include <memory>
 #include <random>
+#include <atomic>
 
 #define ID_SYM 0
 #define ID_XOR 1
 
 /// Code for SAT result
-enum SatResult
+enum class SatResult
 {
    SAT = 10,
    UNSAT = 20,
@@ -43,11 +43,13 @@ enum SatResult
 };
 
 /// @brief Code for the type of algorithm of solvers
-enum SolverAlgorithmType
+enum class SolverAlgorithmType
 {
    CDCL = 0,
    LOCAL_SEARCH = 1,
-   PREPROCESSING = 2,
+   LOOK_AHEAD = 2,
+   OTHER = 3,
+   UNKNOWN = 255,
 };
 
 /// \defgroup solving Solving/Preprocessing Related Classes
@@ -72,7 +74,8 @@ public:
    /// So that the working strategies support all SolverInterface's.
    virtual void printWinningLog()
    {
-      LOGSTAT("The winner is of type: %s", (this->algoType) ? (this->algoType == 1) ? "LOCAL_SEARCH" : "PREPROCESSING" : "CDCL");
+      int algo = static_cast<int>(this->m_algoType);
+      LOGSTAT("The winner is of type: %s", (algo) ? (algo) ? "LOCAL_SEARCH" : "PREPROCESSING" : "CDCL");
    }
 
    /// Solve the formula with a given cube.
@@ -103,26 +106,42 @@ public:
    virtual void printParameters()
    {
       LOGWARN("printParameters not implemented");
-   };
+   }
 
    /// Native diversification.
    /// @param noise added for some radomness
    virtual void diversify(std::mt19937 &rng_engine, std::uniform_int_distribution<int> &uniform_dist) = 0;
 
-   bool isInitialized() { return this->initialized; }
+   bool isInitialized() { return this->m_initialized; }
+   void setInitialized(bool value) { this->m_initialized = value; }
+
+   SolverAlgorithmType getAlgoType() { return this->m_algoType; }
+
+   unsigned getSolverTypeId() { return this->m_solverTypeId; }
+   void setSolverTypeId(unsigned typeId) { this->m_solverTypeId = typeId; }
+
+   unsigned getSolverId() { return this->m_solverId; }
+   void setSolverId(unsigned id) { this->m_solverId = id; }
 
    /// Constructor.
-   SolverInterface(SolverAlgorithmType algoType) : algoType(algoType)
-   {
-   }
+   SolverInterface(SolverAlgorithmType algoType, int solverId, unsigned typeId) : m_algoType(algoType), m_solverTypeId(typeId), m_solverId(solverId), m_initialized(false)
+   {}
 
    /// Destructor.
    virtual ~SolverInterface()
    {
    }
 
+protected:
    /// Type of this solver.
-   SolverAlgorithmType algoType;
+   SolverAlgorithmType m_algoType;
 
-   std::atomic<bool> initialized = false;
+   /// @brief This bool can be used to detect wrong usage of the interface.
+   std::atomic<bool> m_initialized;
+
+   /// @brief An id local to the type for better control on the diversification. In Distributed mode, m_solverTypeId is not updated as the main m_solverId
+   unsigned m_solverTypeId;
+
+   /// @brief The main id of the solver
+   int m_solverId;
 };

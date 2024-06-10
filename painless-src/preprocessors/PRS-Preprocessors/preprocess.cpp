@@ -2,7 +2,7 @@
 #include "./utils-prs/parse.hpp"
 #include "utils/Logger.h"
 
-preprocess::preprocess(int id_) : Entity(id_), vars(0), clauses(0), maxlen(0)
+preprocess::preprocess(int id_) : PreprocessInterface(id_, id_), vars(0), clauses(0), maxlen(0)
 {
     /* Painless */
     this->maxVarCircuit = Parameters::getIntParam("prs-circuit-var", 1e5);
@@ -125,7 +125,7 @@ void preprocess::update_var_clause_label()
         for (int j = 0; j < l; j++)
             clause[id].push_back(color[abs(clause[i][j])] * pnsign(clause[i][j]));
     }
-    LOGSTAT("[PRS %d] After preprocess: vars: %d -> %d , clauses: %d -> %d", this->getId(), vars, remain_var, clauses, id);
+    LOGSTAT("[PRS %d] After preprocess: vars: %d -> %d , clauses: %d -> %d", this->getPreId(), vars, remain_var, clauses, id);
     for (int i = id + 1; i <= clauses; i++)
         clause[i].clear();
     for (int i = remain_var + 1; i <= vars; i++)
@@ -246,7 +246,7 @@ int preprocess::do_preprocess(char *filename)
     orivars = vars;
     oriclauses = clauses;
 
-    LOG1("[PRS %d] Prs Parsing done in %.3lfs, orivars: %d, oriclauses: %d", this->getId(), std::chrono::duration_cast<std::chrono::milliseconds>(readf - startp).count() / 1000.0, this->orivars, this->oriclauses);
+    LOG1("[PRS %d] Prs Parsing done in %.3lfs, orivars: %d, oriclauses: %d", this->getPreId(), std::chrono::duration_cast<std::chrono::milliseconds>(readf - startp).count() / 1000.0, this->orivars, this->oriclauses);
 
     int res = 0;
 

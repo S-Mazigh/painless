@@ -20,13 +20,15 @@
 #include "utils/Logger.h"
 #include "utils/System.h"
 #include "utils/Parameters.h"
-#include "solvers/KissatMABSolver.h"
 #include "utils/BloomFilter.h"
 #include "utils/ErrorCodes.h"
 #include "utils/SatUtils.h"
+#include "utils/MpiUtils.h"
 #include "painless.h"
 
 #include <cassert>
+
+#include "solvers/CDCL/KissatMABSolver.h"
 
 // loadFormula includes
 extern "C"
@@ -34,10 +36,7 @@ extern "C"
 #include <kissat_mab/src/parse.h>
 }
 
-// Macros for minisat literal representation conversion
-#define MIDX(LIT) (((unsigned)(LIT)) >> 1)
-#define MNEGATED(LIT) (((LIT) & 1u))
-#define MNOT(LIT) (((LIT) ^ 1u))
+std::atomic<unsigned> KissatMABSolver::kissatMabCount(0);
 
 char KissatMabImportUnit(void *painless_interface, kissat *internal_solver)
 {
@@ -73,7 +72,7 @@ char KissatMabImportClause(void *painless_interface, kissat *internal_solver)
         {
             if (clause->lits[i] == clause->lits[j])
             {
-                LOGERROR("Kissat %d tried to import a clause with a duplicated literal %d from %d !!", painless_kissat->id, clause->lits[i], clause->from);
+                LOGERROR("Kissat %d tried to import a clause with a duplicated literal %d from %d !!", painless_kissat->getSolverId(), clause->lits[i], clause->from);
                 exit(1);
             }
         }
@@ -95,7 +94,7 @@ char KissatMabExportClause(void *painless_interface, kissat *internal_solver)
 
     if (lbd > painless_kissat->lbdLimit)
     {
-        LOG4("Solver %d tried to export a clause with lbd %d > %d", painless_kissat->id, lbd, painless_kissat->lbdLimit.load());
+        LOG4("Solver %d tried to export a clause with lbd %d > %d", painless_kissat->getSolverId(), lbd, painless_kissat->lbdLimit.load());
         return false;
     }
 
@@ -112,7 +111,7 @@ char KissatMabExportClause(void *painless_interface, kissat *internal_solver)
         {
             if (lit == kissat_peek_plit(internal_solver, i))
             {
-                LOGERROR("Kissat %d generated a clause with a duplicated literal %d !!", painless_kissat->id, lit);
+                LOGERROR("Kissat %d generated a clause with a duplicated literal %d !!", painless_kissat->getSolverId(), lit);
                 exit(1);
             }
         }
@@ -123,18 +122,20 @@ char KissatMabExportClause(void *painless_interface, kissat *internal_solver)
     }
 
     new_clause->lbd = lbd;
-    new_clause->from = painless_kissat->id;
+    new_clause->from = painless_kissat->getSolverId();
 
     painless_kissat->clausesToExport.addClause(new_clause);
-    LOG4("Solver %d exported a clause with lbd %d and size %d ", painless_kissat->id, lbd, size);
+    LOG4("Solver %d exported a clause with lbd %d and size %d ", painless_kissat->getSolverId(), lbd, size);
     return true;
 }
 
-KissatMABSolver::KissatMABSolver(int id) : SolverCdclInterface(id, KISSAT)
+KissatMABSolver::KissatMABSolver(int id) : SolverCdclInterface(id, KissatMABSolver::kissatMabCount.fetch_add(1), SolverCdclType::KISSAT)
 {
     lbdLimit = 0;
 
     solver = kissat_init();
+
+    family = KissatFamily::MIXED_SWITCH;
 
     kissat_set_export_call(solver, KissatMabExportClause);
     kissat_set_import_call(solver, KissatMabImportClause);
@@ -166,9 +167,9 @@ void KissatMABSolver::loadFormula(const char *filename)
 
     kissat_set_maxVar(this->solver, nbVars);
 
-    this->initialized = true;
+    this->setInitialized(true);
 
-    LOG1("The Kissat Solver %d loaded all the formula with %u variables", this->id, nbVars);
+    LOG1("The Kissat Solver %d loaded all the formula with %u variables", this->getSolverId(), nbVars);
 }
 
 // Get the number of variables of the formula
@@ -200,7 +201,7 @@ void KissatMABSolver::setSolverInterrupt()
 {
     stopSolver = true;
     kissat_terminate(solver);
-    LOG2("Asked kissat %d to terminate", this->id);
+    LOG2("Asked kissat %d to terminate", this->getSolverId());
 }
 
 void KissatMABSolver::unsetSolverInterrupt()
@@ -218,9 +219,9 @@ void KissatMABSolver::setBumpVar(int v)
 SatResult
 KissatMABSolver::solve(const std::vector<int> &cube)
 {
-    if (!this->initialized)
+    if (!this->isInitialized())
     {
-        LOGWARN("Kissat %d was not initialized to be launched!", this->id);
+        LOGWARN("Kissat %d was not initialized to be launched!", this->getSolverId());
         return SatResult::UNKNOWN;
     }
     unsetSolverInterrupt();
@@ -228,7 +229,7 @@ KissatMABSolver::solve(const std::vector<int> &cube)
     // Ugly fix, to be enhanced.
     if (kissat_check_searches(this->solver))
     {
-        LOGERROR("Kissat solver %d was asked to solve more than once !!", this->id);
+        LOGERROR("Kissat solver %d was asked to solve more than once !!", this->getSolverId());
         exit(PERR_NOT_SUPPORTED);
     }
 
@@ -242,17 +243,17 @@ KissatMABSolver::solve(const std::vector<int> &cube)
 
     if (res == 10)
     {
-        LOG1("Kissat %d responded with SAT", this->id);
+        LOG1("Kissat %d responded with SAT", this->getSolverId());
         kissat_check_model(solver);
-        return SAT;
+        return SatResult::SAT;
     }
     if (res == 20)
     {
-        LOG1("Kissat %d responded with UNSAT", this->id);
-        return UNSAT;
+        LOG1("Kissat %d responded with UNSAT", this->getSolverId());
+        return SatResult::UNSAT;
     }
-    LOG1("Kissat %d responded with %d (UNKNOWN)", this->id, res);
-    return UNKNOWN;
+    LOG1("Kissat %d responded with %d (UNKNOWN)", this->getSolverId(), res);
+    return SatResult::UNKNOWN;
 }
 
 void KissatMABSolver::addClause(std::shared_ptr<ClauseExchange> clause)
@@ -262,7 +263,7 @@ void KissatMABSolver::addClause(std::shared_ptr<ClauseExchange> clause)
     {
         if (std::abs(lit) > maxVar)
         {
-            LOGERROR("[Kissat %d] literal %d is out of bound, maxVar is %d", this->id, lit, maxVar);
+            LOGERROR("[Kissat %d] literal %d is out of bound, maxVar is %d", this->getSolverId(), lit, maxVar);
             return;
         }
     }
@@ -302,8 +303,8 @@ void KissatMABSolver::addInitialClauses(const std::vector<simpleClause> &clauses
             kissat_add(this->solver, lit);
         kissat_add(this->solver, 0);
     }
-    this->initialized = true;
-    LOG1("The Kissat Solver %d loaded all the %u clauses with %u variables", this->id, clauses.size(), nbVars);
+    this->setInitialized(true);
+    LOG1("The Kissat Solver %d loaded all the %u clauses with %u variables", this->getSolverId(), clauses.size(), nbVars);
 }
 
 void KissatMABSolver::importClauses(const std::vector<std::shared_ptr<ClauseExchange>> &clauses)
@@ -491,7 +492,7 @@ void KissatMABSolver::initkissatMABOptions()
     kissatMABOptions.insert({"targetinc", 0});
 
     // random seed
-    kissatMABOptions.insert({"seed", this->id}); // used in walk and rephase
+    kissatMABOptions.insert({"seed", this->getSolverId()}); // used in walk and rephase
 
     // Init Mab options
     kissat_mab_init(solver);
@@ -500,20 +501,22 @@ void KissatMABSolver::initkissatMABOptions()
 // Diversify the solver
 void KissatMABSolver::diversify(std::mt19937 &rng_engine, std::uniform_int_distribution<int> &uniform_dist)
 {
-    if (this->initialized)
+    if (this->isInitialized())
     {
         LOGERROR("Diversification must be done before adding clauses because of kissat_reserve()");
         exit(PERR_NOT_SUPPORTED);
     }
 
+    this->computeFamily();
+
     int noise = uniform_dist(rng_engine);
 
-    unsigned maxNoise = Parameters::getIntParam("max-div-noise", 100);
+    unsigned maxNoise = uniform_dist.max();
 
-    kissatMABOptions.at("seed") = this->id; /* changed if dist */
+    kissatMABOptions.at("seed") = this->getSolverId(); /* changed if dist */
 
     /* Half init as all false */
-    if (this->id % 2) // == 1
+    if (this->getSolverId() % 2) // == 1
     {
         kissatMABOptions.at("phase") = 0;
     }
@@ -522,7 +525,7 @@ void KissatMABSolver::diversify(std::mt19937 &rng_engine, std::uniform_int_distr
     switch (this->family)
     {
     // 1/3 Focus on UNSAT
-    case SolverDivFamily::UNSAT_FOCUSED:
+    case KissatFamily::UNSAT_FOCUSED:
         kissatMABOptions.at("stable") = 0;
         kissatMABOptions.at("restartmargin") = 10 + (noise % 5);
         kissatMABOptions.at("restartint") = 1; // bigger values are of interest ?
@@ -537,7 +540,7 @@ void KissatMABSolver::diversify(std::mt19937 &rng_engine, std::uniform_int_distr
         break;
 
     // Focus on SAT ; target at 2 to enable target phase
-    case SolverDivFamily::SAT_STABLE:
+    case KissatFamily::SAT_STABLE:
         kissatMABOptions.at("target") = 2;              /* checks target phase first */
         kissatMABOptions.at("restartint") = 50 + noise; /* less restarts when in focused mode */
         kissatMABOptions.at("restartmargin") = noise % 25 + 10;
@@ -548,7 +551,7 @@ void KissatMABSolver::diversify(std::mt19937 &rng_engine, std::uniform_int_distr
             kissatMABOptions.at("ccanr") = 1;
             kissatMABOptions.at("stable") = 2; /* to start at stable and to not switch to focused*/
             kissatMABOptions.at("walkinitially") = 1;
-            kissatMABOptions.at("walkrounds") = (this->id + noise) % (1 << 4); /* TODO: enhance this*/
+            kissatMABOptions.at("walkrounds") = (this->getSolverId() + noise) % (1 << 4); /* TODO: enhance this*/
             /* Oh's expriment showed that learned clauses are not that important for SAT*/
             kissatMABOptions.at("tier1") = 2;
             kissatMABOptions.at("tier2") = 3;
@@ -558,7 +561,7 @@ void KissatMABSolver::diversify(std::mt19937 &rng_engine, std::uniform_int_distr
             {
                 int heuristicNoise = uniform_dist(rng_engine);
                 kissatMABOptions.at("chrono") = 0;
-                kissatMABOptions.at("walkrounds") = (this->id + noise * 10) % (1 << 12); /* TODO: enhance this*/
+                kissatMABOptions.at("walkrounds") = (this->getSolverId() + noise * 10) % (1 << 12); /* TODO: enhance this*/
 
                 // TODO: look more onto the effect of mab on sat and unsat
                 kissatMABOptions.at("mab") = 0;
@@ -573,7 +576,7 @@ void KissatMABSolver::diversify(std::mt19937 &rng_engine, std::uniform_int_distr
     // Switch mode without target phase : TODO better diversification needed here
     default:
         kissatMABOptions.at("walkinitially") = 1;
-        kissatMABOptions.at("walkrounds") = (this->id + noise) % (1 << 3);
+        kissatMABOptions.at("walkrounds") = (this->getSolverId() + noise) % (1 << 3);
         /* Find other diversification parameters : restarts ?*/
         kissatMABOptions.at("initshuffle") = 1; /* takes some time */
     }
@@ -586,5 +589,18 @@ set_options:
     }
     // ReInit Mab options
     kissat_mab_init(solver);
-    LOG1("Diversification of solver %d of family %d with noise %d", this->id, this->family, noise);
+    LOG1("Diversification of Kissat (%d,%u) of family %d with noise %d", this->getSolverId(), this->getSolverTypeId(), this->family, noise);
+}
+
+void KissatMABSolver::printWinningLog()
+{
+    this->SolverCdclInterface::printWinningLog();
+    int family = static_cast<int>(this->family);
+    LOGSTAT("The winner is KissatMab(%d, %u) of family %s", this->getSolverId(), this->getSolverTypeId(), (family) ? (family == 1) ? "MIXED_SWITCH" : "UNSAT_FOCUSED" : "SAT_STABLE");
+}
+
+void KissatMABSolver::computeFamily()
+{
+    /* + mpi_rank enable better distributed fairness */
+    this->family = static_cast<KissatFamily>((this->getSolverTypeId() + mpi_rank) % 3);
 }

@@ -4,12 +4,13 @@
 #include <fstream>
 #include <unordered_map>
 #include "clauses/ClauseBuffer.h"
-#include "../solvers/SolverCdclInterface.hpp"
 #include "utils/Threading.h"
 #include "utils/ClauseUtils.h"
 
-#define KISSATGASPI_
+#include "SolverCdclInterface.hpp"
+#include "KissatFamily.h"
 
+#define KISSATGASPI_
 
 // KissatGASPISolver includes
 #include <GASPIKISSAT/src/kissat.h>
@@ -71,6 +72,10 @@ public:
    /// Get solver statistics.
    void printStatistics();
 
+   void printWinningLog() override;
+
+   void computeFamily();
+
    /// Return the model in case of SAT result.
    std::vector<int> getModel();
 
@@ -112,10 +117,15 @@ protected:
    /// Used to stop or continue the resolution.
    std::atomic<bool> stopSolver;
 
+   KissatFamily family;
+
    /// Callback to export/import clauses used by real kissat.
    /* Decided to not use pointers to move because of c++ stl (cannot move an array into a vector, sharedPtr destruction) */
    friend char KissatGaspiImportUnit(void *, kissat *);
    /* With KissatGaspiImportClause(void *painless_interface, int *kclause, unsigned *size): need to not use sharedPtr*/
-   friend char KissatGaspiImportClause(void *, kissat *); 
+   friend char KissatGaspiImportClause(void *, kissat *);
    friend char KissatGaspiExportClause(void *, kissat *);
+
+public:
+   static std::atomic<unsigned> kissatGaspiCount;
 };

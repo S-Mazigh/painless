@@ -16,15 +16,10 @@ RingSharing::RingSharing(std::shared_ptr<GlobalDatabase> g_base) : GlobalSharing
 
 RingSharing::~RingSharing()
 {
-   
 }
 
 void RingSharing::joinProcess(int winnerRank, SatResult res, const std::vector<int> &model)
 {
-    MPI_Cancel(&send_request_left);
-    MPI_Request_free(&send_request_left);
-    MPI_Cancel(&send_request_right);
-    MPI_Request_free(&send_request_right);
     this->GlobalSharingStrategy::joinProcess(winnerRank, res, model);
 }
 
@@ -42,10 +37,6 @@ bool RingSharing::initMpiVariables()
 
     LOG1("[Ring] left: %d, right: %d", left_neighbor, right_neighbor);
 
-    // Bootstrap send requests: otherwise send_flags will not be true for the first sharing round
-    MPI_Isend(nullptr, 0, MPI_INT, left_neighbor, MYMPI_CLAUSES, MPI_COMM_WORLD, &send_request_left);
-    MPI_Isend(nullptr, 0, MPI_INT, right_neighbor, MYMPI_CLAUSES, MPI_COMM_WORLD, &send_request_right);
-
     return GlobalSharingStrategy::initMpiVariables();
 }
 
@@ -59,7 +50,7 @@ bool RingSharing::doSharing()
     int clauses_flag;
     int received_size;
 
-     /* Ending Detection */
+    /* Ending Detection */
     if (GlobalSharingStrategy::doSharing())
     {
         this->joinProcess(mpi_winner, finalResult, {});
@@ -69,58 +60,39 @@ bool RingSharing::doSharing()
     // Sharing
     // =======
 
-    // Test my two neighbors
-    MPI_Test(&send_request_left, &send_flag_left, &status);
-    MPI_Test(&send_request_right, &send_flag_right, &status);
-
-    // Get clauses to send if at least one message was received
-    if (send_flag_left || send_flag_right)
-    {
-        tmp_serializedClauses.clear();
-        gstats.sharedClauses += serializeClauses(tmp_serializedClauses);
-    }
+    tmp_serializedClauses.clear();
+    gstats.sharedClauses += serializeClauses(tmp_serializedClauses);
 
     // Send to my two neighbors my clauses
-    // send only if previous message was sent
-    if (send_flag_left)
-    {
-        clausesToSendSerializedLeft.clear();
-        clausesToSendSerializedLeft = tmp_serializedClauses; // copy before send
-        MPI_Isend(&clausesToSendSerializedLeft[0], clausesToSendSerializedLeft.size(), MPI_INT, left_neighbor, MYMPI_CLAUSES, MPI_COMM_WORLD, &send_request_left);
-        gstats.messagesSent++;
-        LOG2("[Ring] Sent a message of size %d to my left neighbor %d", clausesToSendSerializedLeft.size(), left_neighbor);
-    }
+    clausesToSendSerializedLeft.clear();
+    clausesToSendSerializedLeft = tmp_serializedClauses; // copy before send
+    MPI_Isend(&clausesToSendSerializedLeft[0], clausesToSendSerializedLeft.size(), MPI_INT, left_neighbor, MYMPI_CLAUSES, MPI_COMM_WORLD, &send_request_left);
+    gstats.messagesSent++;
+    LOG2("[Ring] Sent a message of size %d to my left neighbor %d", clausesToSendSerializedLeft.size(), left_neighbor);
 
-    // send only if previous message was sent
-    if (send_flag_right)
-    {
-        clausesToSendSerializedRight.clear();
-        clausesToSendSerializedRight = tmp_serializedClauses; // copy before send
-        MPI_Isend(&clausesToSendSerializedRight[0], clausesToSendSerializedRight.size(), MPI_INT, right_neighbor, MYMPI_CLAUSES, MPI_COMM_WORLD, &send_request_right);
-        gstats.messagesSent++;
-        LOG2("[Ring] Sent a message of size %d to my right neighbor %d", clausesToSendSerializedRight.size(), right_neighbor);
-    }
+    clausesToSendSerializedRight.clear();
+    clausesToSendSerializedRight = tmp_serializedClauses; // copy before send
+    MPI_Isend(&clausesToSendSerializedRight[0], clausesToSendSerializedRight.size(), MPI_INT, right_neighbor, MYMPI_CLAUSES, MPI_COMM_WORLD, &send_request_right);
+    gstats.messagesSent++;
+    LOG2("[Ring] Sent a message of size %d to my right neighbor %d", clausesToSendSerializedRight.size(), right_neighbor);
 
     // Check if my neighbors sent me any clauses
-    MPI_Iprobe(left_neighbor, MYMPI_CLAUSES, MPI_COMM_WORLD, &clauses_flag, &status);
-    if (clauses_flag)
-    {
-        MPI_Get_count(&status, MPI_INT, &received_size);
-        receivedClauses.resize(received_size);
-        MPI_Recv(&receivedClauses[0], received_size, MPI_INT, left_neighbor, MYMPI_CLAUSES, MPI_COMM_WORLD, &status);
-        deserializeClauses(receivedClauses);
-        LOG2("[Ring] Received a message of size %d from my left neighbor %d", received_size, left_neighbor);
-    }
+    MPI_Probe(left_neighbor, MYMPI_CLAUSES, MPI_COMM_WORLD, &status);
+    MPI_Get_count(&status, MPI_INT, &received_size);
+    receivedClauses.resize(received_size);
+    MPI_Recv(&receivedClauses[0], received_size, MPI_INT, left_neighbor, MYMPI_CLAUSES, MPI_COMM_WORLD, &status);
+    deserializeClauses(receivedClauses);
+    LOG2("[Ring] Received a message of size %d from my left neighbor %d", received_size, left_neighbor);
 
-    MPI_Iprobe(right_neighbor, MYMPI_CLAUSES, MPI_COMM_WORLD, &clauses_flag, &status);
-    if (clauses_flag)
-    {
-        MPI_Get_count(&status, MPI_INT, &received_size);
-        receivedClauses.resize(received_size);
-        MPI_Recv(&receivedClauses[0], received_size, MPI_INT, right_neighbor, MYMPI_CLAUSES, MPI_COMM_WORLD, &status);
-        deserializeClauses(receivedClauses);
-        LOG2("[Ring] Received a message of size %d from my right neighbor %d", received_size, right_neighbor);
-    }
+    MPI_Probe(right_neighbor, MYMPI_CLAUSES, MPI_COMM_WORLD, &status);
+    MPI_Get_count(&status, MPI_INT, &received_size);
+    receivedClauses.resize(received_size);
+    MPI_Recv(&receivedClauses[0], received_size, MPI_INT, right_neighbor, MYMPI_CLAUSES, MPI_COMM_WORLD, &status);
+    deserializeClauses(receivedClauses);
+    LOG2("[Ring] Received a message of size %d from my right neighbor %d", received_size, right_neighbor);
+
+    MPI_Wait(&send_request_left, &status);
+    MPI_Wait(&send_request_right, &status);
 
     LOG2("[Ring] received cls %u shared cls %d", this->gstats.receivedClauses, this->gstats.sharedClauses);
 
@@ -178,7 +150,7 @@ void RingSharing::deserializeClauses(std::vector<int> &serialized_v_cls)
     int current_cls = 0;
     int nb_clauses = 0;
     int lbd;
-    const unsigned source_id = globalDatabase->getId();
+    const unsigned source_id = globalDatabase->getSharingId();
     const unsigned buffer_size = serialized_v_cls.size();
     std::shared_ptr<ClauseExchange> p_cls;
 

@@ -48,7 +48,7 @@ void setVerbosityLevel(int level)
  * @param issuer the function name that logged this message (for debug and error)
  * @param fmt the message logged
  */
-void log(int verbosityLevel, const char *color, const char *issuer, const char *fmt...)
+void logError(int verbosityLevel, const char *color, const char *issuer, const char *fmt...)
 {
    if (verbosityLevel <= verbosityLevelSetting)
    {
@@ -68,16 +68,43 @@ void log(int verbosityLevel, const char *color, const char *issuer, const char *
       if (Parameters::getBoolParam("dist"))
          printf("[mpi:%d] ", mpi_rank);
 
-      if (issuer[0] != '-') /* only for debug and error */
-         printf("[%s] ", issuer);
+      printf("%s(%s) %s%s%s", FUNC_STYLE, issuer, RESET, color ,ERROR_STYLE);
 
       vprintf(fmt, args);
 
       va_end(args);
 
-      printf(".%s", RESET);
+      printf("%s\n", RESET);
 
-      printf("\n");
+      fflush(stdout);
+   }
+}
+
+void log(int verbosityLevel, const char *color, const char *fmt...)
+{
+   if (verbosityLevel <= verbosityLevelSetting)
+   {
+      std::lock_guard<std::mutex> lockLog(logMutex);
+
+      if (quiet)
+         return; /* placed after lock for real effect */
+
+      va_list args;
+
+      va_start(args, fmt);
+
+      printf("c%s", color);
+
+      printf("[%.2f] ", getRelativeTime());
+
+      if (Parameters::getBoolParam("dist"))
+         printf("[mpi:%d] ", mpi_rank);
+
+      vprintf(fmt, args);
+
+      va_end(args);
+
+      printf("%s\n", RESET);
 
       fflush(stdout);
    }

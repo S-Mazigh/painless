@@ -106,9 +106,10 @@ cmd="$script_dir/../painless"
 args="-v=$verbose -c=$nb_solvers -solver=$solver -t=$timeout -shr-strat=$lstrat -shr-sleep=$shr_sleep $simp $flags -sbva-timeout=$sbva_timeout"
 
 if [ $gstrat -ge 0 ]; then
+    grid5000="--mca pml ^ucx"
     # bind-to none to not have all the threads binded to one core as it is when nb process <= 2
     # map $nb_procs processes to each node, and each process is bound to $nb_solvers hardware threads
-    cmd=$(echo -n "mpirun --hostfile $hostfile --mca orte_abort_on_non_zero_status false --bind-to hwthread --map-by ppr:$nb_procs_per_node:node:pe=$nb_physical_cores $cmd")
+    cmd=$(echo -n "mpirun --hostfile $hostfile $grid5000 --mca orte_abort_on_non_zero_status false --bind-to hwthread --map-by ppr:$nb_procs_per_node:node:pe=$nb_physical_cores $cmd")
     args=$(echo -n "$args -gshr-strat=$gstrat -dist")
 fi
 
@@ -138,7 +139,7 @@ for f in $(cat ${input_files}); do
         # Execute command
         start_time=$(echo "$(date +%s) + $(date +%N) / 1000000000" | bc -l)
 
-        eval $cmd $args $f >$output_file
+        eval $cmd $args $f >$output_file 2>&1
         end_time=$(echo "$(date +%s) + $(date +%N) / 1000000000" | bc -l)
 
         # Capture solution answered

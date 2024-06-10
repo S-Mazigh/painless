@@ -115,7 +115,7 @@ remove_all_duplicated_binary_clauses(kissat *solver)
 				CHECK_AND_ADD_EMPTY();
 				ADD_EMPTY_TO_PROOF();
 				solver->inconsistent = true;
-				std::cout << "inconsistent dans forward.cc::remove_all_duplicated_binary_clauses" << std::endl;
+				// std::cout << "inconsistent dans forward.cc::remove_all_duplicated_binary_clauses" << std::endl;
 				break;
 			}
 			LOG("new resolved unit clause %s", LOGLIT(unit));
@@ -402,7 +402,7 @@ forward_subsumed_clause(kissat *solver, clause *c, bool *removed)
 		CHECK_AND_ADD_EMPTY();
 		ADD_EMPTY_TO_PROOF();
 		solver->inconsistent = true;
-		std::cout << "inconsistent dans forward.cc::forward_subsumed_clause" << std::endl;
+		// std::cout << "inconsistent dans forward.cc::forward_subsumed_clause" << std::endl;
 		return false;
 	}
 

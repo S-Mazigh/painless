@@ -2,7 +2,7 @@
 
 #include "./LocalStrategies/HordeSatSharing.h"
 #include "./LocalStrategies/HordeSatSharingAlt.h"
-#include "./LocalStrategies/HordeStrSharing.h"
+// #include "./LocalStrategies/HordeStrSharing.h"
 #include "./LocalStrategies/SimpleSharing.h"
 #include "./Sharer.h"
 

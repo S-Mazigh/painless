@@ -32,7 +32,7 @@ void *mainWorker(void *arg)
 {
    SequentialWorker *sq = (SequentialWorker *)arg;
 
-   SatResult res = UNKNOWN;
+   SatResult res = SatResult::UNKNOWN;
 
    std::vector<int> model;
 
@@ -53,7 +53,7 @@ void *mainWorker(void *arg)
 
       sq->waitInterruptLock.unlock();
 
-      if (res == SAT)
+      if (res == SatResult::SAT)
       {
          model = sq->solver->getModel();
       }
@@ -124,7 +124,7 @@ void SequentialWorker::join(WorkingStrategy *winner, SatResult res,
       globalEnding = true;
       finalResult = res;
 
-      if (res == SAT)
+      if (res == SatResult::SAT)
       {
          finalModel = model;
       }

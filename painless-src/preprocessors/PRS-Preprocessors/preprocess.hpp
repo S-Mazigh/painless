@@ -3,7 +3,8 @@
 #include "./utils-prs/hashmap.hpp"
 #include "./utils-prs/bitset.hpp"
 #include "utils/Parameters.h"
-#include "Entity.hpp"
+#include "utils/ErrorCodes.h"
+#include "preprocessors/PreprocessInterface.h"
 
 #include <queue>
 #include <unordered_set>
@@ -79,7 +80,7 @@ struct type_gate
     }
 };
 
-struct preprocess : public Entity
+struct preprocess : public PreprocessInterface
 {
 public:
     preprocess(int id_);
@@ -161,7 +162,7 @@ public:
             model.push_back(i * this->mapval[i]);
         }
 
-        LOG1("[PRS %d] restored model of size %d, vars: %d, orivars: %d", this->getId(), model.size(), this->vars, this->orivars);
+        LOG1("[PRS %d] restored model of size %d, vars: %d, orivars: %d", this->getPreId(), model.size(), this->vars, this->orivars);
     }
 
     int count = 0; /* Moved from preprocess.cpp */
@@ -190,7 +191,7 @@ public:
             res = preprocess_circuit();
             if (res == 10)
             {
-                LOG("[PRS %d] Solved by Circuit Check", this->getId());
+                LOG("[PRS %d] Solved by Circuit Check", this->getPreId());
             }
             else
             {
@@ -198,7 +199,7 @@ public:
             }
         }
         auto circuit = std::chrono::high_resolution_clock::now();
-        LOG1("[PRS %d] Circuit Check took %.3lfs", id, std::chrono::duration_cast<std::chrono::milliseconds>(circuit - init).count() / 1000.0);
+        LOG1("[PRS %d] Circuit Check took %.3lfs", this->getPreId(), std::chrono::duration_cast<std::chrono::milliseconds>(circuit - init).count() / 1000.0);
         return res;
     }
 
@@ -212,7 +213,7 @@ public:
             res = preprocess_gauss();
             if (!res)
             {
-                LOG("[PRS %d] Solved by Gauss Elimination", this->getId());
+                LOG("[PRS %d] Solved by Gauss Elimination", this->getPreId());
                 res = 20;
             }
             else
@@ -221,7 +222,7 @@ public:
             }
         }
         auto gauss = std::chrono::high_resolution_clock::now();
-        LOG1("[PRS %d] Gauss Elimination (xor-limit=%d) took %.3lfs", id, this->maxClauseSizeXor, std::chrono::duration_cast<std::chrono::milliseconds>(gauss - init).count() / 1000.0);
+        LOG1("[PRS %d] Gauss Elimination (xor-limit=%d) took %.3lfs", this->getPreId(), this->maxClauseSizeXor, std::chrono::duration_cast<std::chrono::milliseconds>(gauss - init).count() / 1000.0);
         return res;
     }
 
@@ -243,7 +244,7 @@ public:
         }
 
         auto up = std::chrono::high_resolution_clock::now();
-        LOG1("[PRS %d] Unit Propagation took %.3lfs", id, std::chrono::duration_cast<std::chrono::milliseconds>(up - init).count() / 1000.0);
+        LOG1("[PRS %d] Unit Propagation took %.3lfs", this->getPreId(), std::chrono::duration_cast<std::chrono::milliseconds>(up - init).count() / 1000.0);
         return res;
     }
 
@@ -257,7 +258,7 @@ public:
             res = preprocess_card();
             if (!res)
             {
-                LOG("[PRS %d] Solved by Card Elimination", this->getId());
+                LOG("[PRS %d] Solved by Card Elimination", this->getPreId());
                 delete[] mapto;
                 delete[] mapval;
                 clause.clear();
@@ -271,7 +272,7 @@ public:
             }
         }
         auto card = std::chrono::high_resolution_clock::now();
-        LOG1("[PRS %d] Card Elimination took %.3lfs", id, std::chrono::duration_cast<std::chrono::milliseconds>(card - init).count() / 1000.0);
+        LOG1("[PRS %d] Card Elimination took %.3lfs", this->getPreId(), std::chrono::duration_cast<std::chrono::milliseconds>(card - init).count() / 1000.0);
         return res;
     }
 
@@ -281,7 +282,7 @@ public:
         int res = preprocess_resolution();
         if (!res)
         {
-            LOG("[PRS %d] Solved by Resolution", this->getId());
+            LOG("[PRS %d] Solved by Resolution", this->getPreId());
             delete[] mapto;
             delete[] mapval;
             clause.clear();
@@ -290,7 +291,7 @@ public:
             res = 20;
         }
         auto resol = std::chrono::high_resolution_clock::now();
-        LOG1("[PRS %d] Resolution took %.3lfs", id, std::chrono::duration_cast<std::chrono::milliseconds>(resol - init).count() / 1000.0);
+        LOG1("[PRS %d] Resolution took %.3lfs", this->getPreId(), std::chrono::duration_cast<std::chrono::milliseconds>(resol - init).count() / 1000.0);
         return res;
     }
 
@@ -312,7 +313,59 @@ public:
             }
         }
         auto binary = std::chrono::high_resolution_clock::now();
-        LOG1("[PRS %d] Binary took %.3lfs", id, std::chrono::duration_cast<std::chrono::milliseconds>(binary - init).count() / 1000.0);
+        LOG1("[PRS %d] Binary took %.3lfs", this->getPreId(), std::chrono::duration_cast<std::chrono::milliseconds>(binary - init).count() / 1000.0);
         return res;
+    }
+
+    /* TODO */
+
+    void setInterrupt()
+    {
+        LOGERROR("NOT IMPLEMENTED, YET!");
+        exit(PERR_NOT_SUPPORTED);
+    }
+
+    void unsetInterrupt()
+    {
+        LOGERROR("NOT IMPLEMENTED, YET!");
+        exit(PERR_NOT_SUPPORTED);
+    }
+
+    void run()
+    {
+        LOGERROR("NOT IMPLEMENTED, YET!");
+        exit(PERR_NOT_SUPPORTED);
+    }
+
+    void addInitialClauses(const std::vector<simpleClause> &clauses, unsigned nbVariables)
+    {
+        LOGERROR("NOT IMPLEMENTED, YET!");
+        exit(PERR_NOT_SUPPORTED);
+    }
+
+    void loadFormula(const char *filename)
+    {
+        LOGERROR("NOT IMPLEMENTED, YET!");
+        exit(PERR_NOT_SUPPORTED);
+    }
+
+    void printStatistics()
+    {
+        LOGERROR("NOT IMPLEMENTED, YET!");
+        exit(PERR_NOT_SUPPORTED);
+    }
+
+    std::vector<simpleClause> getClauses()
+    {
+        LOGERROR("NOT IMPLEMENTED, YET!");
+        exit(PERR_NOT_SUPPORTED);
+    }
+
+    std::size_t getClausesCount() { return clauses; }
+
+    void printParameters()
+    {
+        LOGERROR("NOT IMPLEMENTED, YET!");
+        exit(PERR_NOT_SUPPORTED);
     }
 };

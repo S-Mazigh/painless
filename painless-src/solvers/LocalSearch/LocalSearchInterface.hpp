@@ -1,8 +1,6 @@
 #pragma once
 
-#include "SolverInterface.hpp"
-
-#include "Entity.hpp"
+#include "solvers/SolverInterface.hpp"
 
 enum LocalSearchType
 {
@@ -16,14 +14,14 @@ struct LocalSearchStats
     /*TODO add all needed stats */
 };
 
-class LocalSearchSolver : public SolverInterface, public Entity
+class LocalSearchInterface : public SolverInterface
 {
 public:
-    LocalSearchSolver(int _id, LocalSearchType _lsType) : SolverInterface(SolverAlgorithmType::LOCAL_SEARCH), Entity(_id), lsType(_lsType)
+    LocalSearchInterface(int solverId, unsigned typeId, LocalSearchType _lsType) : SolverInterface(SolverAlgorithmType::LOCAL_SEARCH, solverId, typeId), lsType(_lsType)
     {
     }
 
-    ~LocalSearchSolver()
+    ~LocalSearchInterface()
     {
     }
 
@@ -33,7 +31,7 @@ public:
     void printWinningLog()
     {
         this->SolverInterface::printWinningLog();
-        LOGSTAT("The winner is %u.", this->id);
+        LOGSTAT("The winner is %u.", this->getSolverId());
     }
 
     unsigned getNbUnsat() 

@@ -14,7 +14,7 @@ class GlobalDatabase : public SharingEntity
 {
 public:
     // Constructor
-    GlobalDatabase(int entity_id, std::shared_ptr<ClauseDatabase> firstDB, std::shared_ptr<ClauseDatabase> secondDB);
+    GlobalDatabase(std::shared_ptr<ClauseDatabase> firstDB, std::shared_ptr<ClauseDatabase> secondDB);
 
     /// Destructor
     ~GlobalDatabase();

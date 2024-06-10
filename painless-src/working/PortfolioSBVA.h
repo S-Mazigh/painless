@@ -3,7 +3,7 @@
 #include "utils/Parameters.h"
 #include "working/WorkingStrategy.h"
 
-#include "solvers/LocalSearchInterface.hpp"
+#include "solvers/LocalSearch/LocalSearchInterface.hpp"
 
 #include "preprocessors/StructuredBva.hpp"
 #include "preprocessors/PRS-Preprocessors/preprocess.hpp"
@@ -11,6 +11,8 @@
 #include "sharing/GlobalDatabase.h"
 #include "sharing/LocalStrategies/LocalSharingStrategy.h"
 #include "sharing/GlobalStrategies/GlobalSharingStrategy.h"
+
+#include "sharing/Sharer.h"
 
 #include <thread>
 #include <mutex>
@@ -64,6 +66,7 @@ protected:
     // Data
     //-----
 
+    /* Memory is not freed at clear !! : To move to solve */
     std::vector<simpleClause> initClauses;
     unsigned beforeSbvaVarCount = 0;
     int leastClausesIdx = -1;

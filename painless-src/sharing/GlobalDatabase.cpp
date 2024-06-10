@@ -6,7 +6,7 @@
 #include <numeric>
 #include <sstream>
 
-GlobalDatabase::GlobalDatabase(int entity_id, std::shared_ptr<ClauseDatabase> firstDB, std::shared_ptr<ClauseDatabase> secondDB) : SharingEntity(entity_id), clausesToSend(firstDB), clausesReceived(secondDB)
+GlobalDatabase::GlobalDatabase(std::shared_ptr<ClauseDatabase> firstDB, std::shared_ptr<ClauseDatabase> secondDB) : SharingEntity(), clausesToSend(firstDB), clausesReceived(secondDB)
 {
 }
 

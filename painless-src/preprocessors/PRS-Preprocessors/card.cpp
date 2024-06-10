@@ -311,7 +311,7 @@ int preprocess::card_elimination() {
 
 int preprocess::preprocess_card() {
     int sone = search_almost_one();
-    LOGDEBUG1("[PRS %d] [CE] almost one cons: %d\n", id, sone);
+    LOGDEBUG1("[PRS %d] [CE] almost one cons: %d\n", this->getPreId(), sone);
     if (!sone) return 1;
     int scc = scc_almost_one();
     int sz = card_one.size();

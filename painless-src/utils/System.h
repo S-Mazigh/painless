@@ -17,30 +17,38 @@
 
 #pragma once
 #include <sys/time.h>
+#include <atomic>
+#include <thread>
+
 
 #define BILLION 1000000000
 #define MILLION 1000000
 
-/// @brief Singleton class for MemInfo
+/// @brief Singleton class for MemInfo. Please access this singleton using one thread only.
 class MemInfo
 {
 protected:
-    MemInfo()
-    {
-    }
+    MemInfo();
 
 public:
     MemInfo(MemInfo &other) = delete;
 
     void operator=(const MemInfo &) = delete;
 
+    bool testOwner();
+
     static MemInfo *getInstance();
+
+    static void deleteInstance();
 
     /// Parse the /proc/meminfo file to get some data
     void parseMemInfo();
 
     /// Get the current memory used of this process in Ko.
     static double getUsedMemory();
+
+    /// @brief Get the pick of used memory reached by this process
+    static double getPickUsedMemory();
 
     /// @brief Get the current memory used in all the OS.
     static double getNotAvailableMemory();
@@ -56,6 +64,7 @@ public:
 
 protected:
     static MemInfo *singleton_;
+    std::atomic<std::thread::id> owner;
 
 public:
     long MemTotal;

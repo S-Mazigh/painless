@@ -14,37 +14,76 @@ int world_size = 0;
 int mpi_winner = 0;
 #endif
 
-bool serializeClauses(const std::vector<simpleClause> &clauses, std::vector<char> &serializedClauses)
+/* TODO: use cap'n proto instead of protobuf, but retain the chunk management */
+const int CHUNK_SIZE = 10000000; // Rought estimate of 10 millions clauses
+
+bool serializeClauses(const std::vector<simpleClause> &clauses, std::vector<std::vector<char>> &serializedChunks)
 {
     Clauses protobufClauses;
+    protobufClauses.set_num_clauses(clauses.size());
+
+    int chunkIndex = 0;
+    ClausesChunk *currentChunk = protobufClauses.add_chunks();
+    currentChunk->set_chunk_index(chunkIndex);
+
     for (const auto &clause : clauses)
     {
-        Clause *tempClause = protobufClauses.add_clauses();
-        for (auto lit : clause)
-            tempClause->add_literals(lit);
-    }
-    size_t size = protobufClauses.ByteSizeLong();
-    serializedClauses.resize(size);
+        if (currentChunk->clauses_size() >= CHUNK_SIZE)
+        {
+            currentChunk = protobufClauses.add_chunks();
+            currentChunk->set_chunk_index(++chunkIndex);
+        }
 
-    return protobufClauses.SerializeToArray(serializedClauses.data(), size);
+        Clause *tempClause = currentChunk->add_clauses();
+        for (auto lit : clause)
+        {
+            tempClause->add_literals(lit);
+        }
+    }
+
+    protobufClauses.set_num_chunks(protobufClauses.chunks_size());
+
+    for (int i = 0; i < protobufClauses.chunks_size(); ++i)
+    {
+        const auto &chunk = protobufClauses.chunks(i);
+        size_t size = chunk.ByteSizeLong();
+        std::vector<char> serializedChunk(size);
+        chunk.SerializeToArray(serializedChunk.data(), size);
+        serializedChunks.push_back(std::move(serializedChunk));
+    }
+
+    return true;
 }
 
-bool deserializeClauses(const std::vector<char> &serializedClauses, std::vector<simpleClause> &clauses)
+bool deserializeClauses(const std::vector<std::vector<char>> &serializedChunks, std::vector<simpleClause> &clauses)
 {
     Clauses protobufClauses;
-    if (!protobufClauses.ParseFromArray(serializedClauses.data(), serializedClauses.size()))
+    protobufClauses.set_num_chunks(serializedChunks.size());
+
+    for (const auto &serializedChunk : serializedChunks)
     {
-        LOGERROR("Error parsing protobuf message");
-        return false;
+        ClausesChunk chunk;
+        if (!chunk.ParseFromArray(serializedChunk.data(), serializedChunk.size()))
+        {
+            LOGERROR("Error parsing protobuf chunk");
+            return false;
+        }
+
+        protobufClauses.add_chunks()->CopyFrom(chunk);
     }
 
     clauses.clear();
-    for (const auto &clause : protobufClauses.clauses())
+    for (const auto &chunk : protobufClauses.chunks())
     {
-        simpleClause tempClause;
-        for (int i = 0; i < clause.literals_size(); ++i)
-            tempClause.push_back(clause.literals(i));
-        clauses.push_back(tempClause);
+        for (const auto &clause : chunk.clauses())
+        {
+            simpleClause tempClause;
+            for (int i = 0; i < clause.literals_size(); ++i)
+            {
+                tempClause.push_back(clause.literals(i));
+            }
+            clauses.push_back(tempClause);
+        }
     }
 
     return true;
@@ -52,49 +91,63 @@ bool deserializeClauses(const std::vector<char> &serializedClauses, std::vector<
 
 bool sendFormula(std::vector<simpleClause> &clauses, unsigned *varCount, int rootRank)
 {
-
     // Bcast varCount
     MPI_Bcast(varCount, 1, MPI_UNSIGNED, rootRank, MPI_COMM_WORLD);
 
     LOGDEBUG1("VarCount = %u", *varCount);
 
     u_int64_t bufferSize;
-    std::vector<char> serializedClauses;
+    std::vector<std::vector<char>> serializedChunks;
 
     if (mpi_rank == rootRank)
     {
         LOGDEBUG1("Root clauses number: %u", clauses.size());
-        // Serialize clauses
-        if (!serializeClauses(clauses, serializedClauses))
+        // Serialize clauses into chunks
+        if (!serializeClauses(clauses, serializedChunks))
         {
             LOGERROR("Error serializing clauses");
             return false;
         }
 
-        // compress serializeClauses
-
-        bufferSize = serializedClauses.size();
+        bufferSize = serializedChunks.size();
     }
 
-    // Need to broadcast the size of the buffer first to be able to use Bcast.
+    // Broadcast the number of chunks first
     MPI_Bcast(&bufferSize, 1, MPI_UNSIGNED_LONG_LONG, rootRank, MPI_COMM_WORLD);
 
-    LOGDEBUG1("Size of buffer is %lu", bufferSize);
+    LOGDEBUG1("Number of chunks is %lu", bufferSize);
 
-    if (mpi_rank != rootRank)
-        serializedClauses.resize(bufferSize);
+    serializedChunks.resize(bufferSize);
+    for (u_int64_t i = 0; i < bufferSize; ++i)
+    {
+        if (mpi_rank != rootRank)
+        {
+            // Resize chunk buffer to receive the correct size
+            u_int64_t chunkSize;
+            MPI_Bcast(&chunkSize, 1, MPI_UNSIGNED_LONG_LONG, rootRank, MPI_COMM_WORLD);
+            serializedChunks[i].resize(chunkSize);
+        }
+        else
+        {
+            // Send chunk size
+            u_int64_t chunkSize = serializedChunks[i].size();
+            MPI_Bcast(&chunkSize, 1, MPI_UNSIGNED_LONG_LONG, rootRank, MPI_COMM_WORLD);
+        }
 
-    MPI_Bcast(serializedClauses.data(), bufferSize, MPI_CHAR, rootRank, MPI_COMM_WORLD);
+        // Broadcast the actual chunk data
+        MPI_Bcast(serializedChunks[i].data(), serializedChunks[i].size(), MPI_CHAR, rootRank, MPI_COMM_WORLD);
+    }
 
     if (mpi_rank != rootRank)
     {
-        // deserialize serializedClauses into clauses
-        if (!deserializeClauses(serializedClauses, clauses))
+        // Deserialize serializedChunks into clauses
+        if (!deserializeClauses(serializedChunks, clauses))
         {
             LOGERROR("Error deserializing clauses");
             return false;
         }
-        LOGDEBUG1("Workers, deserialized %u clauses", clauses.size());
+        LOGDEBUG1("Worker: deserialized %u clauses", clauses.size());
     }
+
     return true;
 }

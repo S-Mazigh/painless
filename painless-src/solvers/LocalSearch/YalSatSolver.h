@@ -10,7 +10,7 @@ extern "C"
 #include <yalsat/yals.h>
 }
 
-class YalSat : public LocalSearchSolver
+class YalSat : public LocalSearchInterface
 {
 public:
     YalSat(int _id);
@@ -54,4 +54,7 @@ private:
     std::atomic<bool> terminateSolver;
 
     unsigned long clausesCount;
+
+public:
+    static std::atomic<unsigned> yalsatCount;
 };

@@ -20,21 +20,21 @@
 #include "utils/Logger.h"
 #include "utils/System.h"
 #include "utils/Parameters.h"
-#include "solvers/KissatGASPISolver.h"
 #include "utils/BloomFilter.h"
 #include "utils/ErrorCodes.h"
 #include "utils/SatUtils.h"
+#include "utils/MpiUtils.h"
 #include "painless.h"
+
+
+#include "solvers/CDCL/KissatGASPISolver.h"
 
 #include <cassert>
 
 // loadFormula includes
 #include <GASPIKISSAT/src/parse.h>
 
-// Macros for minisat literal representation conversion
-#define MIDX(LIT) (((unsigned)(LIT)) >> 1)
-#define MNEGATED(LIT) (((LIT) & 1u))
-#define MNOT(LIT) (((LIT) ^ 1u))
+std::atomic<unsigned> KissatGASPISolver::kissatGaspiCount(0);
 
 char KissatGaspiImportUnit(void *painless_interface, kissat *internal_solver)
 {
@@ -70,7 +70,7 @@ char KissatGaspiImportClause(void *painless_interface, kissat *internal_solver)
         {
             if (clause->lits[i] == clause->lits[j])
             {
-                LOGERROR("GaspiKissat %d tried to import a clause with a duplicated literal %d from %d !!", painless_kissat->id, clause->lits[i], clause->from);
+                LOGERROR("GaspiKissat %d tried to import a clause with a duplicated literal %d from %d !!", painless_kissat->getSolverId(), clause->lits[i], clause->from);
                 exit(1);
             }
         }
@@ -92,7 +92,7 @@ char KissatGaspiExportClause(void *painless_interface, kissat *internal_solver)
 
     if (lbd > painless_kissat->lbdLimit)
     {
-        LOG4("GaspiKissat %d tried to export a clause with lbd %d > %d", painless_kissat->id, lbd, painless_kissat->lbdLimit.load());
+        LOG4("GaspiKissat %d tried to export a clause with lbd %d > %d", painless_kissat->getSolverId(), lbd, painless_kissat->lbdLimit.load());
         return false;
     }
 
@@ -109,7 +109,7 @@ char KissatGaspiExportClause(void *painless_interface, kissat *internal_solver)
         {
             if (lit == gaspi::kissat_peek_plit(internal_solver, i))
             {
-                LOGERROR("GaspiKissat %d generated a clause with a duplicated literal %d !!", painless_kissat->id, lit);
+                LOGERROR("GaspiKissat %d generated a clause with a duplicated literal %d !!", painless_kissat->getSolverId(), lit);
                 exit(1);
             }
         }
@@ -120,18 +120,20 @@ char KissatGaspiExportClause(void *painless_interface, kissat *internal_solver)
     }
 
     new_clause->lbd = lbd;
-    new_clause->from = painless_kissat->id;
+    new_clause->from = painless_kissat->getSolverId();
 
     painless_kissat->clausesToExport.addClause(new_clause);
-    LOG4("GaspiKissat %d exported a clause with lbd %d and size %d ", painless_kissat->id, lbd, size);
+    LOG4("GaspiKissat %d exported a clause with lbd %d and size %d ", painless_kissat->getSolverId(), lbd, size);
     return true;
 }
 
-KissatGASPISolver::KissatGASPISolver(int id) : SolverCdclInterface(id, KISSAT)
+KissatGASPISolver::KissatGASPISolver(int id) : SolverCdclInterface(id, KissatGASPISolver::kissatGaspiCount.fetch_add(1), SolverCdclType::GKISSAT)
 {
     lbdLimit = 0;
 
     solver = gaspi::kissat_init();
+
+    family = KissatFamily::MIXED_SWITCH;
 
     gaspi::kissat_set_export_call(solver, KissatGaspiExportClause);
     gaspi::kissat_set_import_call(solver, KissatGaspiImportClause);
@@ -163,9 +165,9 @@ void KissatGASPISolver::loadFormula(const char *filename)
 
     gaspi::kissat_set_maxVar(this->solver, nbVars);
 
-    this->initialized = true;
+    this->setInitialized(true);
 
-    LOG1("The GaspiKissat %d loaded all the formula with %u variables", this->id, nbVars);
+    LOG1("The GaspiKissat %d loaded all the formula with %u variables", this->getSolverId(), nbVars);
 }
 
 // Get the number of variables of the formula
@@ -197,7 +199,7 @@ void KissatGASPISolver::setSolverInterrupt()
 {
     stopSolver = true;
     gaspi::kissat_terminate(solver);
-    LOG2("Asked GaspiKissat %d to terminate", this->id);
+    LOG2("Asked GaspiKissat %d to terminate", this->getSolverId());
 }
 
 void KissatGASPISolver::unsetSolverInterrupt()
@@ -215,9 +217,9 @@ void KissatGASPISolver::setBumpVar(int v)
 SatResult
 KissatGASPISolver::solve(const std::vector<int> &cube)
 {
-    if (!this->initialized)
+    if (!this->isInitialized())
     {
-        LOGWARN("GaspiKissat %d was not initialized to be launched!", this->id);
+        LOGWARN("GaspiKissat %d was not initialized to be launched!", this->getSolverId());
         return SatResult::UNKNOWN;
     }
     unsetSolverInterrupt();
@@ -225,7 +227,7 @@ KissatGASPISolver::solve(const std::vector<int> &cube)
     // Ugly fix, to be enhanced.
     if (gaspi::kissat_check_searches(this->solver))
     {
-        LOGERROR("GaspiKissat solver %d was asked to solve more than once !!", this->id);
+        LOGERROR("GaspiKissat solver %d was asked to solve more than once !!", this->getSolverId());
         exit(PERR_NOT_SUPPORTED);
     }
 
@@ -239,17 +241,17 @@ KissatGASPISolver::solve(const std::vector<int> &cube)
 
     if (res == 10)
     {
-        LOG1("GaspiKissat %d responded with SAT.", this->id);
+        LOG1("GaspiKissat %d responded with SAT.", this->getSolverId());
         gaspi::kissat_check_model(solver);
-        return SAT;
+        return SatResult::SAT;
     }
     if (res == 20)
     {
-        LOG1("GaspiKissat %d responded with UNSAT.", this->id);
-        return UNSAT;
+        LOG1("GaspiKissat %d responded with UNSAT.", this->getSolverId());
+        return SatResult::UNSAT;
     }
-    LOG1("GaspiKissat %d responded with %d (UNKNOWN).", this->id, res);
-    return UNKNOWN;
+    LOG1("GaspiKissat %d responded with %d (UNKNOWN).", this->getSolverId(), res);
+    return SatResult::UNKNOWN;
 }
 
 void KissatGASPISolver::addClause(std::shared_ptr<ClauseExchange> clause)
@@ -259,7 +261,7 @@ void KissatGASPISolver::addClause(std::shared_ptr<ClauseExchange> clause)
     {
         if (std::abs(lit) > maxVar)
         {
-            LOGERROR("[GaspiKissat %d] literal %d is out of bound, maxVar is %d", this->id, lit, maxVar);
+            LOGERROR("[GaspiKissat %d] literal %d is out of bound, maxVar is %d", this->getSolverId(), lit, maxVar);
             return;
         }
     }
@@ -297,7 +299,7 @@ void KissatGASPISolver::addInitialClauses(const std::vector<simpleClause> &claus
     std::vector<unsigned> sortedVars;
 
     /* TODO: get the occurences from PRS or SBVA ?? */
-    for(int i=0; i<=nbVars; i++)
+    for (int i = 0; i <= nbVars; i++)
     {
         sortedVars.push_back(i);
     }
@@ -311,8 +313,8 @@ void KissatGASPISolver::addInitialClauses(const std::vector<simpleClause> &claus
         gaspi::kissat_add(this->solver, 0);
     }
 
-    this->initialized = true;
-    LOG1("The GaspiKissat Solver %d loaded all the %u clauses with %u variables", this->id, clauses.size(), nbVars);
+    this->setInitialized(true);
+    LOG1("The GaspiKissat Solver %d loaded all the %u clauses with %u variables", this->getSolverId(), clauses.size(), nbVars);
 }
 
 void KissatGASPISolver::importClauses(const std::vector<std::shared_ptr<ClauseExchange>> &clauses)
@@ -501,26 +503,28 @@ void KissatGASPISolver::initkissatGASPIOptions()
     kissatGASPIOptions.insert({"targetinc", 0});
 
     // random seed
-    kissatGASPIOptions.insert({"seed", this->id}); // used in walk and rephase
+    kissatGASPIOptions.insert({"seed", this->getSolverId()}); // used in walk and rephase
 }
 
 // Diversify the solver
 void KissatGASPISolver::diversify(std::mt19937 &rng_engine, std::uniform_int_distribution<int> &uniform_dist)
 {
-    if (this->initialized)
+    if (this->isInitialized())
     {
         LOGERROR("Diversification must be done before adding clauses because of kissat_reserve()");
         exit(PERR_NOT_SUPPORTED);
     }
 
+    this->computeFamily();
+
     int noise = uniform_dist(rng_engine);
 
-    unsigned maxNoise = Parameters::getIntParam("max-div-noise", 100);
+    unsigned maxNoise = uniform_dist.max();
 
-    kissatGASPIOptions.at("seed") = this->id; /* changed if dist */
+    kissatGASPIOptions.at("seed") = this->getSolverId(); /* changed if dist */
 
     /* Half init as all false */
-    if (this->id % 2) // == 1
+    if (this->getSolverId() % 2) // == 1
     {
         kissatGASPIOptions.at("phase") = 0;
     }
@@ -529,7 +533,7 @@ void KissatGASPISolver::diversify(std::mt19937 &rng_engine, std::uniform_int_dis
     switch (this->family)
     {
     // 1/3 Focus on UNSAT
-    case SolverDivFamily::UNSAT_FOCUSED:
+    case KissatFamily::UNSAT_FOCUSED:
         kissatGASPIOptions.at("stable") = 0;
         kissatGASPIOptions.at("restartmargin") = 10 + (noise % 5);
         kissatGASPIOptions.at("restartint") = 1; // bigger values are of interest ?
@@ -545,7 +549,7 @@ void KissatGASPISolver::diversify(std::mt19937 &rng_engine, std::uniform_int_dis
         break;
 
     // Focus on SAT ; target at 2 to enable target phase
-    case SolverDivFamily::SAT_STABLE:
+    case KissatFamily::SAT_STABLE:
         kissatGASPIOptions.at("target") = 2;              /* checks target phase first */
         kissatGASPIOptions.at("restartint") = 50 + noise; /* less restarts when in focused mode */
         kissatGASPIOptions.at("restartmargin") = noise % 25 + 10;
@@ -553,10 +557,10 @@ void KissatGASPISolver::diversify(std::mt19937 &rng_engine, std::uniform_int_dis
         // Some solvers (50% chance) do initial walk and walk further in rephasing ( benifical for SAT formulae)
         if (noise <= maxNoise / 2)
         {
-            LOG3("Solver %d in the half", this->id);
+            LOG3("Solver %d in the half", this->getSolverId());
             kissatGASPIOptions.at("stable") = 2; /* to start at stable and to not switch to focused*/
             kissatGASPIOptions.at("walkinitially") = 1;
-            kissatGASPIOptions.at("walkrounds") = (this->id + noise) % (1 << 4); /* TODO: enhance this*/
+            kissatGASPIOptions.at("walkrounds") = (this->getSolverId() + noise) % (1 << 4); /* TODO: enhance this*/
             /* Oh's expriment showed that learned clauses are not that important for SAT*/
             kissatGASPIOptions.at("tier1") = 2;
             kissatGASPIOptions.at("tier2") = 3;
@@ -565,9 +569,9 @@ void KissatGASPISolver::diversify(std::mt19937 &rng_engine, std::uniform_int_dis
             if (noise <= maxNoise / 4)
             {
                 int heuristicNoise = uniform_dist(rng_engine);
-                LOG3("Solver %d in the quarter", this->id);
+                LOG3("Solver %d in the quarter", this->getSolverId());
                 kissatGASPIOptions.at("chrono") = 0;
-                kissatGASPIOptions.at("walkrounds") = (this->id + noise * 10) % (1 << 12); /* TODO: enhance this*/
+                kissatGASPIOptions.at("walkrounds") = (this->getSolverId() + noise * 10) % (1 << 12); /* TODO: enhance this*/
 
                 // TODO: look more onto the effect of mab on sat and unsat
                 kissatGASPIOptions.at("mab") = 0;
@@ -581,7 +585,7 @@ void KissatGASPISolver::diversify(std::mt19937 &rng_engine, std::uniform_int_dis
     // Switch mode without target phase : TODO better diversification needed here
     default:
         kissatGASPIOptions.at("walkinitially") = 1;
-        kissatGASPIOptions.at("walkrounds") = (this->id + noise) % (1 << 3);
+        kissatGASPIOptions.at("walkrounds") = (this->getSolverId() + noise) % (1 << 3);
         /* Find other diversification parameters : restarts ?*/
         kissatGASPIOptions.at("initshuffle") = 1; /* takes some time */
     }
@@ -596,5 +600,18 @@ set_options:
     // Init options
     gaspi::kissat_mab_init(solver);
     gaspi::kissat_gaspi_init(solver);
-    LOG1("Diversification of gaspiKissat %d of family %d with noise %d", this->id, this->family, noise);
+    LOG1("Diversification of gaspiKissat (%d,%u) of family %d with noise %d", this->getSolverId(), this->getSolverTypeId(), this->family, noise);
+}
+
+void KissatGASPISolver::printWinningLog()
+{
+    this->SolverCdclInterface::printWinningLog();
+    int family = static_cast<int>(this->family);
+    LOGSTAT("The winner is GaspiKissat(%d, %u) of family %s", this->getSolverId(), this->getSolverTypeId(), (family) ? (family == 1) ? "MIXED_SWITCH" : "UNSAT_FOCUSED" : "SAT_STABLE");
+}
+
+void KissatGASPISolver::computeFamily()
+{
+    /* + mpi_rank enable better distributed fairness */
+    this->family = static_cast<KissatFamily>((this->getSolverTypeId() + mpi_rank) % 3);
 }

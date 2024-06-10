@@ -30,7 +30,7 @@ static void *mainThrSharing(void *arg);
 /// \ingroup sharing
 
 /// @brief A sharer is a thread responsible to share clauses between solvers.
-class Sharer : public Entity
+class Sharer
 {
 public:
    /// Constructors.
@@ -46,17 +46,21 @@ public:
    /// @brief To join the thread of this sharer object
    inline void join()
    {
-      if(sharer == nullptr) return ;
+      if (sharer == nullptr)
+         return;
       sharer->join();
       delete sharer;
       sharer = nullptr;
-       LOGDEBUG1("Sharer %d joined", id);
+      LOGDEBUG1("Sharer %d joined", this->getId());
    }
 
    inline void setThreadAffinity(int coreId)
    {
       this->sharer->setThreadAffinity(coreId);
    }
+
+   inline int getId() { return this->m_sharerId; }
+   inline void setId(int id) { this->m_sharerId = id; }
 
 protected:
    /// Pointer to the thread in charge of sharing.
@@ -65,6 +69,8 @@ protected:
    /// @brief Heuristic for strategy implementation comparaison (TODO: ifndef NSTAT for such probes)
    double totalSharingTime = 0;
 
+   unsigned round;
+
    /// Strategy/Strategies used to shared clauses.
    std::vector<std::shared_ptr<SharingStrategy>> sharingStrategies;
 
@@ -72,4 +78,6 @@ protected:
    /// @param  sharer the sharer object
    /// @return NULL if well ended
    friend void *mainThrSharing(void *);
+
+   int m_sharerId;
 };

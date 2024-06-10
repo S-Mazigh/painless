@@ -215,7 +215,7 @@ bool HordeSatSharingAlt::doSharing()
 
 void HordeSatSharingAlt::visit(SolverCdclInterface *solver)
 {
-   LOG4("[HordeAlt] Visiting the solver %d", solver->id);
+   LOG4("[HordeAlt] Visiting the solver %d", solver->getSharingId());
 
    // Here I check the number of produced clauses before selecting them (maybe will not cause solvers to export potentially useless clauses)
    int usedPercent;
@@ -223,12 +223,12 @@ void HordeSatSharingAlt::visit(SolverCdclInterface *solver)
    if (usedPercent < 75 && !this->initPhase)
    {
       solver->increaseClauseProduction();
-      LOG3("[HordeAlt] production increase for solver %d.", solver->id);
+      LOG3("[HordeAlt] production increase for solver %d.", solver->getSharingId());
    }
    else if (usedPercent > 98)
    {
       solver->decreaseClauseProduction();
-      LOG3("[HordeAlt] production decrease for solver %d.", solver->id);
+      LOG3("[HordeAlt] production decrease for solver %d.", solver->getSharingId());
    }
    if (round >= this->roundBeforeIncrease)
    {
@@ -238,12 +238,12 @@ void HordeSatSharingAlt::visit(SolverCdclInterface *solver)
 
 void HordeSatSharingAlt::visit(SharingEntity *sh_entity)
 {
-   LOG4("[HordeAlt] Visiting the sh_entity %d", sh_entity->id);
+   LOG4("[HordeAlt] Visiting the sh_entity %d", sh_entity->getSharingId());
 }
 
 #ifndef NDIST
 void HordeSatSharingAlt::visit(GlobalDatabase *g_base)
 {
-   LOG4("[HordeAlt] Visiting the global database %d", g_base->id);
+   LOG4("[HordeAlt] Visiting the global database %d", g_base->getSharingId());
 }
 #endif

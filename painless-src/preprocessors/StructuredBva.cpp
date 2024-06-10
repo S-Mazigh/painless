@@ -21,7 +21,7 @@ bool randomOrder(const queuePair &lhs, const queuePair &rhs)
     return std::rand() % 2 == 0;
 }
 
-StructuredBVA::StructuredBVA(int _id) : Entity(_id)
+StructuredBVA::StructuredBVA(int _id) : PreprocessInterface(_id, _id)
 {
     /* Status */
     this->initialized = false;
@@ -42,7 +42,7 @@ StructuredBVA::StructuredBVA(int _id) : Entity(_id)
 
 StructuredBVA::~StructuredBVA()
 {
-    LOGDEBUG1("SBVA %d deleted!", this->getId());
+    LOGDEBUG1("SBVA %d deleted!", this->getPreId());
 }
 
 unsigned StructuredBVA::getVariablesCount()
@@ -50,16 +50,11 @@ unsigned StructuredBVA::getVariablesCount()
     return this->varCount;
 }
 
-unsigned StructuredBVA::getDivisionVariable()
-{
-    return (rand() % getVariablesCount()) + 1;
-}
-
 void StructuredBVA::setInterrupt()
 {
     if (!this->stopPreprocessing)
     {
-        LOG1("Asked SBVA %d to terminate", this->id);
+        LOG1("Asked SBVA %d to terminate", this->getPreId());
         this->stopPreprocessing = true;
     }
 }
@@ -120,7 +115,7 @@ unsigned StructuredBVA::getThreeHopHeuristic(int lit1, int lit2)
     {
         return this->tempTieHeuristicCache[MATRIX_VAR_TO_IDX(var2)];
     }
-    /* Update_adjacency matrix here because since there may be added variables */
+    /* Update_adjacency matrix here since there may be added variables */
 
     this->updateAdjacencyMatrix(var1); /* update in case needed */
     this->updateAdjacencyMatrix(var2); /* update in case needed */
@@ -141,7 +136,7 @@ unsigned StructuredBVA::getThreeHopHeuristic(int lit1, int lit2)
 
         this->updateAdjacencyMatrix(var); /* update if needed: source of bug */
         Eigen::SparseVector<int> *vec3 = &this->adjacencyMatrix[*idxPtr];
-        /* dot : returns the sum of products of the adjacencies of neighbors var and var2 have in commone
+        /* dot : returns the sum of products of the adjacencies of neighbors var and var2 have in common
                 The sum is then multiplied by the adjency of var2 with var */
         /* the more var and var1 have the same neighbors, the greater the weight. And the more var2 is connected to var, the greater the weight*/
         totalCount += count * vec3->dot(vec1);
@@ -216,7 +211,7 @@ void StructuredBVA::addInitialClauses(const std::vector<simpleClause> &initClaus
 
     if (this->stopPreprocessing)
     {
-        LOGDEBUG1("[SBVA %d] stopped at addInitialClauses", this->id);
+        LOGDEBUG1("[SBVA %d] stopped at addInitialClauses", this->getPreId());
         return;
     }
 
@@ -233,13 +228,13 @@ void StructuredBVA::addInitialClauses(const std::vector<simpleClause> &initClaus
 
     if (this->stopPreprocessing)
     {
-        LOGDEBUG1("[SBVA %d] stopped at addInitialClauses after updateMatrices", this->id);
+        LOGDEBUG1("[SBVA %d] stopped at addInitialClauses after updateMatrices", this->getPreId());
         return;
     }
 
     this->varCount = nbVariables;
     this->initialized = true;
-    LOG1("Loaded all clauses in SBVA %d, duplicates detected %d", id, duplicatesCount);
+    LOG1("Loaded all clauses in SBVA %d, duplicates detected %d", this->getPreId(), duplicatesCount);
 }
 
 void StructuredBVA::loadFormula(const char *filename)
@@ -301,7 +296,7 @@ void StructuredBVA::setTieBreakHeuristic(SBVATieBreak heuristic)
 void StructuredBVA::printStatistics()
 {
     LOG1("[SBVA %d] varCount: %u, realClauseCount: %lu, adjacencyDeleted: %u, replacementsCount: %u",
-            this->id,
+            this->getPreId(),
             this->varCount,
             this->clauses.size() - this->adjacencyDeleted,
             this->adjacencyDeleted,
@@ -311,17 +306,17 @@ void StructuredBVA::printStatistics()
 void StructuredBVA::printParameters()
 {
     LOG1("[SBVA %d] generateProof: %s, preserveModelCount: %s, maxReplacements: %u, pairCompare: %s, tieBreakHeuristic: %s",
-            this->id,
+            this->getPreId(),
             this->generateProof ? "true" : "false",
             this->preserveModelCount ? "true" : "false",
             this->maxReplacements,
             (pairCompare.func == decreasingOrder) ? "decreasingOrder" : (pairCompare.func == increasingOrder) ? "increasingOrder"
                                                                     : (pairCompare.func == randomOrder)       ? "randomOrder"
                                                                                                               : "unknown",
-            (tieBreakHeuristic == NONE) ? "NONE" : (tieBreakHeuristic == THREEHOPS) ? "THREEHOPS"
-                                               : (tieBreakHeuristic == MOSTOCCUR)   ? "MOSTOCCUR"
-                                               : (tieBreakHeuristic == LEASTOCCUR)  ? "LEASTOCCUR"
-                                               : (tieBreakHeuristic == RANDOM)      ? "RANDOM"
+            (tieBreakHeuristic == SBVATieBreak::NONE) ? "NONE" : (tieBreakHeuristic == SBVATieBreak::THREEHOPS) ? "THREEHOPS"
+                                               : (tieBreakHeuristic == SBVATieBreak::MOSTOCCUR)   ? "MOSTOCCUR"
+                                               : (tieBreakHeuristic == SBVATieBreak::LEASTOCCUR)  ? "LEASTOCCUR"
+                                               : (tieBreakHeuristic == SBVATieBreak::RANDOM)      ? "RANDOM"
                                                                                     : "unknown");
 }
 
@@ -334,7 +329,7 @@ void StructuredBVA::diversify(std::mt19937 &rng_engine, std::uniform_int_distrib
 
     unsigned sbvaCount = Parameters::getIntParam("sbva-count", 12);
     if(!sbvaCount) return;
-    int tempId = this->id % sbvaCount;
+    int tempId = this->getPreId() % sbvaCount;
     // 2 Configuration
     // if( 1 == tempId)
     // {

@@ -1,9 +1,10 @@
-# pragma once
+#pragma once
 
-#include "SolverInterface.hpp"
+#include "solvers/SolverInterface.hpp"
+#include "sharing/SharingEntity.hpp"
 
 /// Code  for the type of solvers
-enum SolverCdclType
+enum class SolverCdclType
 {
    GLUCOSE = 0,
    LINGELING = 1,
@@ -11,16 +12,8 @@ enum SolverCdclType
    MINISAT = 3,
    KISSAT = 4,
    MAPLECOMSPS = 5,
-   KISSATMABPROP = 6,
+   GKISSAT = 6,
    REDUCER = 10,
-};
-
-/// @brief Code for the Family of a cdcl solver at diversification
-enum SolverDivFamily
-{
-   SAT_STABLE = 0,
-   MIXED_SWITCH = 1,
-   UNSAT_FOCUSED = 2,
 };
 
 /// Structure for solver statistics
@@ -43,13 +36,11 @@ struct SolvingCdclStatistics
    double memPeak;             ///< Maximum memory used in Ko.
 };
 
-
 /// \ingroup solving
 
 class SolverCdclInterface : public SolverInterface, public SharingEntity
 {
 public:
-
    /// Set initial phase for a given variable.
    virtual void setPhase(const unsigned var, const bool phase) = 0;
 
@@ -72,13 +63,12 @@ public:
    void printWinningLog()
    {
       this->SolverInterface::printWinningLog();
-      LOGSTAT( "The winner is %d of family %s", this->id, (this->family) ? (this->family == 1) ? "MIXED_SWITCH" : "UNSAT_FOCUSED" : "SAT_STABLE");
    }
 
    /// Constructor.
-   SolverCdclInterface(int solverId, SolverCdclType solverCdclType) : SolverInterface(SolverAlgorithmType::CDCL), SharingEntity(solverId)
+   SolverCdclInterface(int solverId, unsigned typeId, SolverCdclType solverCdclType) : SolverInterface(SolverAlgorithmType::CDCL, solverId, typeId), SharingEntity(), m_cdclType(solverCdclType)
    {
-      type = solverCdclType;
+      LOGDEBUG1("I am solver %d, typeId: %u", m_solverId, m_solverTypeId);
    }
 
    /// @brief The method that will call the right visit method of the SharingEntityVisitor v.
@@ -88,18 +78,11 @@ public:
       v->visit(this);
    }
 
-   void setFamily(SolverDivFamily family)
-   {
-      this->family = family;
-   }
-
    /// Destructor.
    virtual ~SolverCdclInterface()
    {
    }
 
    /// Type of this solver.
-   SolverCdclType type;
-
-   SolverDivFamily family;
+   SolverCdclType m_cdclType;
 };

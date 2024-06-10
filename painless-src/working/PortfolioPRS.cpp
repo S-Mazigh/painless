@@ -36,7 +36,7 @@ PortfolioPRS::PortfolioPRS()
    {
       int maxClauseSize = Parameters::getIntParam("maxClauseSize", 50);
       /* The ids are to be managed separately, idDiversification, and idSharingEntity, Temp: cpus is surely not used by the solvers */
-      this->globalDatabase = std::make_shared<GlobalDatabase>(cpus, std::make_shared<ClauseDatabaseLockFree>(maxClauseSize), std::make_shared<ClauseDatabaseLockFree>(maxClauseSize));
+      this->globalDatabase = std::make_shared<GlobalDatabase>(std::make_shared<ClauseDatabaseLockFree>(maxClauseSize), std::make_shared<ClauseDatabaseLockFree>(maxClauseSize));
    }
 #endif
 }
@@ -60,7 +60,7 @@ void PortfolioPRS::solve(const std::vector<int> &cube)
    std::vector<std::thread> clausesLoad;
 
    std::vector<std::shared_ptr<SolverCdclInterface>> cdclSolvers;
-   std::vector<std::shared_ptr<LocalSearchSolver>> localSolvers;
+   std::vector<std::shared_ptr<LocalSearchInterface>> localSolvers;
 
    double approxMemoryPerSolver;
 
@@ -96,7 +96,7 @@ void PortfolioPRS::solve(const std::vector<int> &cube)
          this->join(this, finalResult, finalModel);
       }
 
-      receivedFinalResultBcast = finalResult;
+      receivedFinalResultBcast = static_cast<int>(finalResult);
 
       if (receivedFinalResultBcast != 0)
          goto prs_sync;
@@ -120,7 +120,7 @@ void PortfolioPRS::solve(const std::vector<int> &cube)
             this->sbva.run();
             // sbva->printStatistics();
             
-            LOG2("Sbva %d ended", this->sbva.id);
+            LOG2("Sbva %d ended", this->sbva.getPreId());
             
             this->sbva.printStatistics();
 
@@ -207,15 +207,15 @@ prs_sync:
    else if (MemInfo::getAvailableMemory() > approxMemoryPerSolver)
       SolverFactory::createSolver('k', cdclSolvers, localSolvers);
 
-   SolverFactory::diversification(cdclSolvers, localSolvers, Parameters::getBoolParam("dist"), mpi_rank, world_size);
+   SolverFactory::diversification(cdclSolvers, localSolvers);
 
    for (auto cdcl : cdclSolvers)
    {
-      clausesLoad.emplace_back(&LocalSearchSolver::addInitialClauses, cdcl, std::ref(initClauses), varCount);
+      clausesLoad.emplace_back(&LocalSearchInterface::addInitialClauses, cdcl, std::ref(initClauses), varCount);
    }
    for (auto local : localSolvers)
    {
-      clausesLoad.emplace_back(&LocalSearchSolver::addInitialClauses, local, std::ref(initClauses), varCount);
+      clausesLoad.emplace_back(&LocalSearchInterface::addInitialClauses, local, std::ref(initClauses), varCount);
    }
 
    /* Sharing */
@@ -286,7 +286,7 @@ prs_sync:
 void PortfolioPRS::join(WorkingStrategy *strat, SatResult res,
                         const std::vector<int> &model)
 {
-   if (res == UNKNOWN || strategyEnding)
+   if (res == SatResult::UNKNOWN || strategyEnding)
       return;
 
    strategyEnding = true;
@@ -298,7 +298,7 @@ void PortfolioPRS::join(WorkingStrategy *strat, SatResult res,
       globalEnding = true;
       finalResult = res;
 
-      if (res == SAT)
+      if (res == SatResult::SAT)
       {
          finalModel = model;
 

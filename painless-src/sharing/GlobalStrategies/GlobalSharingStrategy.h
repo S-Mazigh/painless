@@ -57,7 +57,7 @@ protected:
     MPI_Request send_end_request;
 
     /// @brief Stores the result received from others
-    std::vector<SatResult> receivedFinalResultRoot;
+    std::vector<int> receivedFinalResultRoot;
 };
 
 #endif

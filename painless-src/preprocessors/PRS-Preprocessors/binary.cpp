@@ -29,7 +29,7 @@ bool preprocess::preprocess_binary() {
         C->insert(id1, i);
         C->insert(id2, i);
     }
-    LOGDEBUG1("[PRS %d] After insert", this->getId());
+    LOGDEBUG1("[PRS %d] After insert", this->getPreId());
     int simplify = 1, turn = 0;
     while (simplify) {
         simplify = 0;
@@ -192,7 +192,7 @@ bool preprocess::preprocess_binary() {
                 else varval[i] = varval[f[i]] * val[i];
             }
     }
-    LOGDEBUG1("[PRS %d] turns: %d", this->getId(), turn);
+    LOGDEBUG1("[PRS %d] turns: %d", this->getPreId(), turn);
 
     for (int i = 1; i <= clauses; i++) {
         if (clause_delete[i]) continue;

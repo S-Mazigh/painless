@@ -99,7 +99,7 @@ void GenericSharing::deserializeClauses(std::vector<int> &serialized_v_cls)
     int current_cls = 0;
     int nb_clauses = 0;
     int lbd;
-    const unsigned source_id = globalDatabase->getId();
+    const unsigned source_id = globalDatabase->getSharingId();
     const unsigned buffer_size = serialized_v_cls.size();
     std::shared_ptr<ClauseExchange> p_cls;
 

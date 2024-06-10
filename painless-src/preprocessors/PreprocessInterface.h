@@ -1,17 +1,17 @@
+#pragma once
+
 #include "utils/ClauseUtils.h"
 
 class PreprocessInterface
 {
-public: 
-     /// Constructor.
-    PreprocessInterface() {}
+public:
+    /// Constructor.
+    PreprocessInterface(int id, unsigned typeId): m_preId(id), m_preTypeId(typeId) {}
 
     /// Destructor.
     virtual ~PreprocessInterface() {}
 
     virtual unsigned getVariablesCount() = 0;
-
-    virtual unsigned getDivisionVariable() = 0;
 
     virtual void setInterrupt() = 0;
 
@@ -35,7 +35,19 @@ public:
 
     virtual void restoreModel(std::vector<int> &model) = 0;
 
+    unsigned getPreTypeId() { return this->m_preTypeId; }
+    void setPreTypeId(unsigned typeId) { this->m_preTypeId = typeId; }
+
+    unsigned getPreId() { return this->m_preId; }
+    void setPreId(unsigned id) { this->m_preId = id; }
+
 protected:
     /// @brief When the preprocessing can be started
     bool initialized = false;
+
+    /// @brief An id local to the type for better control on the diversification. In Distributed mode, m_preTypeId is not updated as the main m_preId
+    unsigned m_preTypeId;
+
+    /// @brief Main id of the preprocessor
+    int m_preId;
 };

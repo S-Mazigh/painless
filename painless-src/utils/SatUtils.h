@@ -23,6 +23,11 @@
 #include "ClauseUtils.h"
 #include <algorithm>
 
+// Macros for minisat literal representation conversion
+#define MIDX(LIT) (((unsigned)(LIT)) >> 1)
+#define MNEGATED(LIT) (((LIT) & 1u))
+#define MNOT(LIT) (((LIT) ^ 1u))
+
 #define SKIP_NONDIGIT(c, f) \
     do                      \
     {                       \
@@ -36,7 +41,7 @@
         c = fgetc(f);           \
     } while (isdigit(c))
 
-/// Load the cnf contains in the file to the solver.
+/// Load the cnf contained in the file to the solver.
 bool parseFormula(const char *filename, std::vector<simpleClause> &clauses, unsigned *varCount);
 
 bool parseParameters(const char *filename, unsigned *clauseCount, unsigned *varCount);

@@ -152,7 +152,7 @@ bool SimpleSharing::doSharing()
     {
         for (auto cls : filtered)
         {
-            if (cls->from != consumer->id)
+            if (cls->from != consumer->getSharingId())
             {
                 consumer->importClause(cls);
             }
@@ -168,18 +168,18 @@ bool SimpleSharing::doSharing()
 
 void SimpleSharing::visit(SolverCdclInterface *solver)
 {
-    LOG4("[SimpleShr] Visiting the solver %d", solver->id);
+    LOG4("[SimpleShr] Visiting the solver %d", solver->getSharingId());
 }
 
 void SimpleSharing::visit(SharingEntity *sh_entity)
 {
-    LOG4("[SimpleShr] Visiting the sh_entity %d", sh_entity->id);
+    LOG4("[SimpleShr] Visiting the sh_entity %d", sh_entity->getSharingId());
 }
 
 #ifndef NDIST
 void SimpleSharing::visit(GlobalDatabase *g_base)
 {
-    LOG4("[SimpleShr] Visiting the global database %d", g_base->id);
+    LOG4("[SimpleShr] Visiting the global database %d", g_base->getSharingId());
 
     LOG2("[SimpleShr] Added %d clauses imported from another process", filtered.size());
 }

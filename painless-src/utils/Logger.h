@@ -1,7 +1,7 @@
 #pragma once
 
- #include<memory>
- #include<vector>
+#include <memory>
+#include <vector>
 
 /* TODO: Maybe use the boost header to support other compilers than gcc */
 
@@ -29,14 +29,17 @@
 #define MAGENTA "\033[35m"
 #define RED "\033[31m"
 #define RESET "\033[0m"
-#define WHITE "\037[34m"
+#define WHITE "\033[37m"
 #define YELLOW "\033[33m" // for Kissat LogPainless
+#define FUNC_STYLE "\033[2m"
+#define ERROR_STYLE "\033[1m"
 
 /// Set the verbosity level.
 void setVerbosityLevel(int level);
 
 /// Function to print log with a certain level of verbosity.
-void log(int verbosityLevel, const char *color, const char *issuer, const char *fmt...);
+void log(int verbosityLevel, const char *color, const char *fmt...);
+void logError(int verbosityLevel, const char *color, const char *issuer, const char *fmt...);
 void logClause(int verbosityLevel, const char *color, const int *lits, unsigned size, const char *fmt...);
 void logSolution(const char *string);
 
@@ -46,57 +49,57 @@ void logModel(const std::vector<int> &model);
 /* To be able to disable logs dynamically */
 extern std::atomic<bool> quiet;
 
-#define LOGERROR(...)                            \
-    do                                           \
-    {                                            \
-        log(0, RED, FUNCTION_NAME, __VA_ARGS__); \
+#define LOGERROR(...)                                 \
+    do                                                \
+    {                                                 \
+        logError(0, RED, FUNCTION_NAME, __VA_ARGS__); \
     } while (0)
 
-#define LOGWARN(...)                                 \
-    do                                               \
-    {                                                \
-        log(0, MAGENTA, FUNCTION_NAME, __VA_ARGS__); \
+#define LOGWARN(...)                                      \
+    do                                                    \
+    {                                                     \
+        logError(0, MAGENTA, FUNCTION_NAME, __VA_ARGS__); \
     } while (0)
 
-#define LOGSTAT(...)                     \
-    do                                   \
-    {                                    \
-        log(0, GREEN, "-", __VA_ARGS__); \
+#define LOGSTAT(...)                \
+    do                              \
+    {                               \
+        log(0, GREEN, __VA_ARGS__); \
     } while (0)
 
 #ifndef PQUIET
 
-#define LOG(...)                         \
-    do                                   \
-    {                                    \
-        log(0, RESET, "-", __VA_ARGS__); \
+#define LOG(...)                    \
+    do                              \
+    {                               \
+        log(0, RESET, __VA_ARGS__); \
     } while (0)
 
-#define LOG1(...)                        \
-    do                                   \
-    {                                    \
-        log(1, RESET, "-", __VA_ARGS__); \
+#define LOG1(...)                   \
+    do                              \
+    {                               \
+        log(1, RESET, __VA_ARGS__); \
     } while (0)
 
-#define LOG2(...)                        \
-    do                                   \
-    {                                    \
-        log(2, RESET, "-", __VA_ARGS__); \
+#define LOG2(...)                   \
+    do                              \
+    {                               \
+        log(2, RESET, __VA_ARGS__); \
     } while (0)
 
-#define LOG3(...)                        \
-    do                                   \
-    {                                    \
-        log(3, RESET, "-", __VA_ARGS__); \
+#define LOG3(...)                   \
+    do                              \
+    {                               \
+        log(3, RESET, __VA_ARGS__); \
     } while (0)
 
-#define LOG4(...)                        \
-    do                                   \
-    {                                    \
-        log(4, RESET, "-", __VA_ARGS__); \
+#define LOG4(...)                   \
+    do                              \
+    {                               \
+        log(4, RESET, __VA_ARGS__); \
     } while (0)
 
-#define LOGVECTOR(lits, size, ...)                    \
+#define LOGVECTOR(lits, size, ...)                     \
     do                                                 \
     {                                                  \
         logClause(1, YELLOW, lits, size, __VA_ARGS__); \
@@ -130,24 +133,24 @@ extern std::atomic<bool> quiet;
     } while (0)
 
 #define LOGVECTOR(...) \
-    do                  \
-    {                   \
+    do                 \
+    {                  \
     } while (0)
 
 #endif
 
 #ifndef NDEBUG
 
-#define LOGDEBUG1(...)                            \
-    do                                            \
-    {                                             \
-        log(2, BLUE, FUNCTION_NAME, __VA_ARGS__); \
+#define LOGDEBUG1(...)                                 \
+    do                                                 \
+    {                                                  \
+        logError(2, BLUE, FUNCTION_NAME, __VA_ARGS__); \
     } while (0)
 
-#define LOGDEBUG2(...)                            \
-    do                                            \
-    {                                             \
-        log(5, BLUE, FUNCTION_NAME, __VA_ARGS__); \
+#define LOGDEBUG2(...)                                 \
+    do                                                 \
+    {                                                  \
+        logError(5, BLUE, FUNCTION_NAME, __VA_ARGS__); \
     } while (0)
 
 #define LOGCLAUSE(lits, size, ...)                   \

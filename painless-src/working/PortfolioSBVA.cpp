@@ -26,7 +26,7 @@ void runSBVA(char *filename, std::mt19937 &engine, std::uniform_int_distribution
 
    if (!sbva->isInitialized())
    {
-      LOGWARN("SBVA %d was not initialized in time thus returning !", sbva->getId());
+      LOGWARN("SBVA %d was not initialized in time thus returning !", sbva->getPreId());
       master->joinSbva();
       return;
    }
@@ -34,7 +34,7 @@ void runSBVA(char *filename, std::mt19937 &engine, std::uniform_int_distribution
    sbva->run();
    // sbva->printStatistics();
 
-   LOG2("Sbva %d ended", sbva->id);
+   LOG2("Sbva %d ended", sbva->getPreId());
    sbva->printStatistics();
 
    master->joinSbva();
@@ -47,7 +47,7 @@ PortfolioSBVA::PortfolioSBVA()
    if (dist)
    {
       int maxClauseSize = Parameters::getIntParam("maxClauseSize", 50);
-      this->globalDatabase = std::make_shared<GlobalDatabase>(cpus, std::make_shared<ClauseDatabaseLockFree>(maxClauseSize), std::make_shared<ClauseDatabaseLockFree>(maxClauseSize));
+      this->globalDatabase = std::make_shared<GlobalDatabase>(std::make_shared<ClauseDatabaseLockFree>(maxClauseSize), std::make_shared<ClauseDatabaseLockFree>(maxClauseSize));
    }
 #endif
 }
@@ -83,7 +83,7 @@ void PortfolioSBVA::solve(const std::vector<int> &cube)
    /* TODO: I should really generalize sequentialWorker and extend Factory to simplify all this mess */
 
    std::vector<std::shared_ptr<SolverCdclInterface>> cdclSolvers;
-   std::vector<std::shared_ptr<LocalSearchSolver>> localSolvers;
+   std::vector<std::shared_ptr<LocalSearchInterface>> localSolvers;
 
    if (initNbSlaves < 0)
    {
@@ -94,8 +94,6 @@ void PortfolioSBVA::solve(const std::vector<int> &cube)
    this->strategyEnding = false;
 
    // parseFormula(Parameters::getFilename(), this->initClauses, &this->beforeSbvaVarCount);
-
-   LOG1("Memory 1: %f", MemInfo::getUsedMemory());
 
    /* PRS */
    int res = prs.do_preprocess(Parameters::getFilename());
@@ -121,13 +119,11 @@ void PortfolioSBVA::solve(const std::vector<int> &cube)
    // Free some memory
    this->prs.release_most();
 
-   LOG1("Memory 2: %f", MemInfo::getUsedMemory());
-
    // PRS uses indexes from 1 to prs.clauses
    this->initClauses = std::move(prs.clause);
    this->initClauses.erase(this->initClauses.begin());
    this->beforeSbvaVarCount = prs.vars;
-
+   
    if (nbSBVA && initClauses.size() > Parameters::getIntParam("sbva-max-clause", MILLION * 10))
    {
       nbSBVA = 1;
@@ -181,7 +177,7 @@ void PortfolioSBVA::solve(const std::vector<int> &cube)
 
    /* Diversification must be done before addInitialClauses because of kissat_reserve (options changes the required memory) */
    /* Do not diversify localSearch not even srand */
-   SolverFactory::diversification(cdclSolvers, {}, Parameters::getBoolParam("dist"), mpi_rank, world_size);
+   SolverFactory::diversification(cdclSolvers, {});
 
    /* Load clauses */
    for (auto cdclSolver : cdclSolvers)
@@ -288,7 +284,7 @@ void PortfolioSBVA::solve(const std::vector<int> &cube)
    {
       if (this->sbvas[i]->isInitialized() && this->sbvas[i]->getNbClausesDeleted() >= leastClauses)
       {
-         LOGDEBUG1("SBVA %d is initialized (%d)", this->sbvas[i]->getId(), this->sbvas[i]->isInitialized());
+         LOGDEBUG1("SBVA %d is initialized (%d)", this->sbvas[i]->getPreId(), this->sbvas[i]->isInitialized());
          leastClauses = this->sbvas[i]->getNbClausesDeleted();
          leastClausesIdx = i;
       }
@@ -307,7 +303,7 @@ void PortfolioSBVA::solve(const std::vector<int> &cube)
    {
       bestClauses = std::move(this->sbvas[leastClausesIdx]->getClauses());
       sbvaVarCount = this->sbvas[leastClausesIdx]->getVariablesCount();
-      LOG("Best SBVA according to nbClausesDeleted is : %d", this->sbvas[leastClausesIdx]->getId());
+      LOG("Best SBVA according to nbClausesDeleted is : %d", this->sbvas[leastClausesIdx]->getPreId());
    }
    else
    {
@@ -347,11 +343,11 @@ void PortfolioSBVA::solve(const std::vector<int> &cube)
 
    // Diversification must be done before adding clauses
    /* TODO separate Local And Cdcl diversification */
-   SolverFactory::diversification(cdclSolvers, localSolvers, Parameters::getBoolParam("dist"), mpi_rank, world_size);
+   SolverFactory::diversification(cdclSolvers, localSolvers);
 
    for (int i = 0; i < nbLs; i++)
    {
-      clausesLoad.emplace_back(&LocalSearchSolver::addInitialClauses, localSolvers[i].get(), std::ref(bestClauses), sbvaVarCount);
+      clausesLoad.emplace_back(&LocalSearchInterface::addInitialClauses, localSolvers[i].get(), std::ref(bestClauses), sbvaVarCount);
    }
    for (int i = 0; i < nbSBVA; i++)
    {
@@ -415,7 +411,7 @@ void PortfolioSBVA::join(WorkingStrategy *strat, SatResult res,
 {
    LOGDEBUG1("SBVA joining from slave %p with res %d. GlobalEnding = %d, StrategyEnding = %d", strat, res, globalEnding.load(), strategyEnding.load());
 
-   if (res == UNKNOWN || strategyEnding || globalEnding)
+   if (res == SatResult::UNKNOWN || strategyEnding || globalEnding)
       return;
 
    strategyEnding = true;

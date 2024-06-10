@@ -210,7 +210,7 @@ void AllGatherSharing::deserializeClauses(std::vector<int> &serialized_v_cls, un
 
             if (!this->b_filter.contains(tmp_cls))
             {
-                p_cls = std::make_shared<ClauseExchange>(std::move(tmp_cls), lbd, globalDatabase->getId());
+                p_cls = std::make_shared<ClauseExchange>(std::move(tmp_cls), lbd, globalDatabase->getSharingId());
                 if (globalDatabase->addReceivedClause(p_cls))
                     gstats.receivedClauses++;
                 this->b_filter.insert(tmp_cls); // either added or not wanted (> maxClauseSize)

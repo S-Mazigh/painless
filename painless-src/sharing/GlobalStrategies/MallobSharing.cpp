@@ -42,7 +42,7 @@ bool MallobSharing::initMpiVariables()
     nb_children = (right_child == MPI_UNDEFINED) ? 0 : (left_child == MPI_UNDEFINED) ? 1
                                                                                      : 2;
     father = (mpi_rank == 0) ? MPI_UNDEFINED : (mpi_rank - 1) / 2;
-    LOG1("[Mallob] parent:%d, left: %d, right: %d", father, left_child, right_child);
+    LOG2("[Mallob] parent:%d, left: %d, right: %d", father, left_child, right_child);
 
     // the equation is described in mallob paper and the best value for alpha: https://doi.org/10.1007/978-3-030-80223-3_35
     // int nb_buffers_aggregated = countDescendants(world_size, mpi_rank);
@@ -63,7 +63,6 @@ bool MallobSharing::doSharing()
     }
 
     // Sharing Management
-    std::vector<int> my_clauses_buffer;
     int received_buffer_size = 0;
     int root_size = 0;
     int buffer_size = 0;
@@ -80,6 +79,7 @@ bool MallobSharing::doSharing()
         MPI_Get_count(&status, MPI_INT, &received_buffer_size);
         receivedClauses.resize(received_buffer_size);
 
+        LOGDEBUG1("Parent %d waiting for right child %d on MPI_Recv", mpi_rank, right_child);
         MPI_Recv(&receivedClauses[0], received_buffer_size, MPI_INT, right_child, MYMPI_CLAUSES, MPI_COMM_WORLD, &status);
 
         nb_buffers_aggregated += receivedClauses.back(); // get nb buffers aggregated of my right child
@@ -94,7 +94,7 @@ bool MallobSharing::doSharing()
             MPI_Probe(left_child, MYMPI_CLAUSES, MPI_COMM_WORLD, &status);
             MPI_Get_count(&status, MPI_INT, &received_buffer_size);
             receivedClauses.resize(received_buffer_size);
-
+            LOGDEBUG1("Parent %d waiting for left child %d on MPI_Recv", mpi_rank, left_child);
             MPI_Recv(&receivedClauses[0], received_buffer_size, MPI_INT, left_child, MYMPI_CLAUSES, MPI_COMM_WORLD, &status);
 
             nb_buffers_aggregated += receivedClauses.back(); // get nb buffers aggregated of my right child
@@ -104,44 +104,44 @@ bool MallobSharing::doSharing()
         }
 
         this->totalSize = nb_buffers_aggregated * pow(0.875, log2(nb_buffers_aggregated)) * defaultSize;
-        LOG2("[Mallob] TotalSize = %d(%d)", totalSize, nb_buffers_aggregated);
-
-        my_clauses_buffer.clear();
-
-        serializeClauses(my_clauses_buffer);
+        LOGDEBUG1("[Mallob] TotalSize = %d(%d)", totalSize, nb_buffers_aggregated);
 
         clausesToSendSerialized.clear();
 
+        serializeClauses(clausesToSendSerialized);
+
         // add my clauses to the merge buffer
-        buffers.push_back(std::move(my_clauses_buffer));
+        buffers.push_back(std::move(clausesToSendSerialized));
+
+        clausesToSendSerialized.clear();
 
         // if I am leaf merge does nothing
         gstats.sharedClauses += mergeSerializedBuffersWithMine(buffers, clausesToSendSerialized);
 
         clausesToSendSerialized.push_back(nb_buffers_aggregated); // number of buffers aggregated
-
-        // Send to my parent the merge result,
-        MPI_Send(&clausesToSendSerialized[0], clausesToSendSerialized.size(), MPI_INT, father, MYMPI_CLAUSES, MPI_COMM_WORLD);
-        gstats.messagesSent++;
     }
     else // leaf
     {
+        clausesToSendSerialized.clear();
         this->totalSize = nb_buffers_aggregated * pow(0.875, log2(nb_buffers_aggregated)) * defaultSize;
-        LOG2("[Mallob] TotalSize = %d(%d)", totalSize, nb_buffers_aggregated);
+        LOGDEBUG1("[Mallob] TotalSize = %d(%d)", totalSize, nb_buffers_aggregated);
         
-        gstats.sharedClauses += serializeClauses(my_clauses_buffer);
-        my_clauses_buffer.push_back(nb_buffers_aggregated); // number of buffers aggregated
-
         //  I am a leaf so i will only send my clauses (no merge)
-        MPI_Send(&my_clauses_buffer[0], my_clauses_buffer.size(), MPI_INT, father, MYMPI_CLAUSES, MPI_COMM_WORLD);
-        gstats.messagesSent++;
+        gstats.sharedClauses += serializeClauses(clausesToSendSerialized);
+        clausesToSendSerialized.push_back(nb_buffers_aggregated); // number of buffers aggregated
     }
 
     // If not root wait for parent
     if (father != MPI_UNDEFINED)
     {
+        LOGDEBUG1("Me %d sending clauses to my parent %d", mpi_rank, father);
+        // Send to my parent my clauses.
+        MPI_Send(&clausesToSendSerialized[0], clausesToSendSerialized.size(), MPI_INT, father, MYMPI_CLAUSES, MPI_COMM_WORLD);
+        gstats.messagesSent++;
+
         // Wait for my parent's response
         // Now I will wait for my father's response
+        LOGDEBUG1("Me %d waiting for my parent's %d response ", mpi_rank, father);
         MPI_Probe(father, MYMPI_CLAUSES, MPI_COMM_WORLD, &status);
         MPI_Get_count(&status, MPI_INT, &received_buffer_size);
         receivedClauses.resize(received_buffer_size);
@@ -154,13 +154,18 @@ bool MallobSharing::doSharing()
         received_buffer_size = receivedClauses.size();
     }
 
+    // MPI_Bcast(&received_buffer_size, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    // MPI_Bcast(&receivedClauses[0], received_buffer_size, MPI_INT, 0, MPI_COMM_WORLD);
+
     // Response to my children
     if (nb_children >= 1)
     {
+        LOGDEBUG1("Me %d responding to my right child %d",mpi_rank, right_child);
         MPI_Send(&receivedClauses[0], received_buffer_size, MPI_INT, right_child, MYMPI_CLAUSES, MPI_COMM_WORLD);
         gstats.messagesSent++;
         if (nb_children == 2)
         {
+            LOGDEBUG1("Me %d responding to my left child %d",mpi_rank, left_child);
             MPI_Send(&receivedClauses[0], received_buffer_size, MPI_INT, left_child, MYMPI_CLAUSES, MPI_COMM_WORLD);
             gstats.messagesSent++;
         }
@@ -229,7 +234,7 @@ void MallobSharing::deserializeClauses(std::vector<int> &serialized_v_cls, bool 
     int current_cls = 0;
     int nb_clauses = 0;
     int lbd;
-    const unsigned source_id = globalDatabase->getId();
+    const unsigned source_id = globalDatabase->getSharingId();
     const unsigned buffer_size = serialized_v_cls.size();
     std::shared_ptr<ClauseExchange> p_cls;
 

@@ -51,7 +51,7 @@ bool preprocess::preprocess_resolution() {
             q[++r] = i, clean[i] = 1;
         }
     }
-    LOGDEBUG1("[PRS %d] [Resolution] len %d", this->getId(), r);
+    LOGDEBUG1("[PRS %d] [Resolution] len %d", this->getPreId(), r);
     
     int now_turn = 0, seen_flag = 0;
     std::vector<int> vars;

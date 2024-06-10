@@ -23,12 +23,13 @@
 #include <fstream>
 #include <unordered_map>
 #include "clauses/ClauseBuffer.h"
-#include "../solvers/SolverCdclInterface.hpp"
 #include "utils/Threading.h"
 #include "utils/ClauseUtils.h"
 
-#define KISSATMAB_
+#include "KissatFamily.h"
+#include "SolverCdclInterface.hpp"
 
+#define KISSATMAB_
 
 // KissatMABSolver includes
 extern "C"
@@ -93,6 +94,10 @@ public:
    /// Get solver statistics.
    void printStatistics();
 
+   void printWinningLog() override;
+
+   void computeFamily();
+
    /// Return the model in case of SAT result.
    std::vector<int> getModel();
 
@@ -134,10 +139,15 @@ protected:
    /// Used to stop or continue the resolution.
    std::atomic<bool> stopSolver;
 
+   KissatFamily family;
+
    /// Callback to export/import clauses used by real kissat.
    /* Decided to not use pointers to move because of c++ stl (cannot move an array into a vector, sharedPtr destruction) */
    friend char KissatMabImportUnit(void *, kissat *);
    /* With KissatMabImportClause(void *painless_interface, int *kclause, unsigned *size): need to not use sharedPtr*/
-   friend char KissatMabImportClause(void *, kissat *); 
+   friend char KissatMabImportClause(void *, kissat *);
    friend char KissatMabExportClause(void *, kissat *);
+
+public:
+   static std::atomic<unsigned> kissatMabCount;
 };

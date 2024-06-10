@@ -15,7 +15,7 @@ def read_csv_files(root_dir):
     for directory in os.listdir(root_dir):
         directory_path = os.path.join(root_dir, directory)
         if os.path.isdir(directory_path):
-            csv_files = [f for f in os.listdir(directory_path) if re.match(r'times_.*\.csv', f)]
+            csv_files = [f for f in os.listdir(directory_path) if re.match(r'times.*\.csv', f)]
             if csv_files:
                 csv_file = os.path.join(directory_path, csv_files[0])
                 # Read CSV file with index_col=False to ensure first column is not used as index
@@ -48,7 +48,7 @@ def print_average_time_and_myPar2(data):
         print()
 
 def draw_graph(data):
-    timeout = 5000  # Set timeout value
+    timeout = 1000  # Set timeout value
     plt.figure(dpi=300)
     
     markers = ['o', 'v', '^', 'd', 's', 'p', '*', 'h', 'H', '1', '2', '3', '<', '4', '>', '+', 'x', 'D', '|', '_', 'P', 'X', '8']
@@ -56,14 +56,14 @@ def draw_graph(data):
     
     for directory, df in data.items():
         # Sort by 'time' column in ascending order
-        match = re.search(r'_L(\d+)_G(-?\d+).*?(\D*)$', directory)
+        match = re.search(r'_L(\d+)_G(-?\d+)-(.*)', directory)
         if match:
             L_value = match.group(1)
             G_value = match.group(2)
             if G_value == '-1':
-                title_info = f"Painless_L{L_value}{match.group(3)}"
+                title_info = f"Painless_L{L_value}-{match.group(3)}"
             else:
-                title_info = f"Painless_L{L_value}_G{G_value}{match.group(3)}"
+                title_info = f"Painless_L{L_value}_G{G_value}-{match.group(3)}"
         else:
             title_info = directory
         

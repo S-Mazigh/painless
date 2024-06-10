@@ -1,13 +1,13 @@
 .DEFAULT_GOAL := all
 
 # Protobuf
-PROTO_SRCS := $(shell find . -name "*.proto" -not -path "./.ignores/*")
+PROTO_SRCS := $(shell find . -name "*.proto" -not -path "*/.ignore/*")
 PROTO_DIR := ./protobuf/
 PROTO_CC = $(addsuffix .pb.cc, $(basename $(PROTO_SRCS)))
 PROTO_H = $(addsuffix .pb.h, $(basename $(PROTO_SRCS)))
 PROTO_OBJS = $(addsuffix .pb.o, $(basename $(PROTO_SRCS)))
 
-SRCS := $(shell find . -name "*.cpp" -not -path "./.ignores/*")
+SRCS := $(shell find . -name "*.cpp" -not -path "*/.ignore/*")
 OBJS = $(addsuffix .o, $(basename $(SRCS)))
 
 EXEC = painless

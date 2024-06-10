@@ -172,9 +172,9 @@ int kissat_saga_initialization(kissat *solver)
     return 0;
 
   start_search(solver);
-  #ifndef QUIET
+#ifndef QUIET
   double start = kissat_process_time();
-  #endif
+#endif
   // solver->ga = new GeneticAlgorithm(20, VARS, 40, 0.88, 0.95, solver->formula, solver);
   // Allocate memory for the GeneticAlgorithm object within the 'ga' pointer.
   solver->ga = static_cast<GeneticAlgorithm *>(::operator new(sizeof(GeneticAlgorithm)));
@@ -191,9 +191,9 @@ int kissat_saga_initialization(kissat *solver)
   {
     // std::cout << "c  Solved by SAGA                                                                       \n";
   }
-  #ifndef QUIET
+#ifndef QUIET
   // std::cout << "c  SAGA time: " << kissat_process_time() - start << " s\n";
-  #endif
+#endif
   RELEASE_STACK(solver->original);
   return 0;
 }

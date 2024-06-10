@@ -26,7 +26,7 @@ get_sat22_inputs.sh
 hostfile
 openMPI
 *.out
-*.pb.*
+.*
 
 libs/m4ri-20140914/Makefile
 libs/m4ri-20140914/config.status
@@ -80,11 +80,6 @@ libs/m4ri-20200125/missing
 libs/m4ri-20200125/test-driver
 libs/m4ri-20200125/tests/Makefile
 libs/m4ri-20200125/tests/Makefile.in
-libs/m4ri-20200125/tests/.*
-libs/m4ri-20200125/.libs
-libs/m4ri-20200125/bench/.deps
-libs/m4ri-20200125/m4ri/.deps
-libs/m4ri-20200125/m4ri/.dirstamp
 
 solvers/kissat_mab/build/
 solvers/kissat_mab/makefile
@@ -100,6 +95,7 @@ solvers/mapleCOMSPS/build
 *.csv
 
 build/
+solvers/yalsat/yalsat
 *.la
 config.status
 libtool

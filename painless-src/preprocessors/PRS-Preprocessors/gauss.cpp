@@ -313,18 +313,18 @@ int preprocess::gauss_elimination()
 bool preprocess::preprocess_gauss()
 {
     int nxors = search_xors();
-    LOG2("[PRS %d]  [GE] XORs: %d (time: 0.00)", this->getId(), nxors);
+    LOG2("[PRS %d]  [GE] XORs: %d (time: 0.00)", this->getPreId(), nxors);
     if (!nxors)
         return true;
     int nvarscc = ecc_var();
-    LOG2("[PRS %d]  [GE] VAR SCC: %d", this->getId(), nvarscc);
+    LOG2("[PRS %d]  [GE] VAR SCC: %d", this->getPreId(), nvarscc);
     int nxorscc = ecc_xor();
-    LOG2("[PRS %d]  [GE] XOR SCCs: %d (time: 0.00)", this->getId(), nxorscc);
+    LOG2("[PRS %d]  [GE] XOR SCCs: %d (time: 0.00)", this->getPreId(), nxorscc);
     int res = gauss_elimination();
-    LOG2("[PRS %d]  [GE] unary xor: %d, bin xor: %d, bin added", this->getId(), gauss_eli_unit, gauss_eli_binary);
+    LOG2("[PRS %d]  [GE] unary xor: %d, bin xor: %d, bin added", this->getPreId(), gauss_eli_unit, gauss_eli_binary);
     if (!res)
     {
-        LOG2("[PRS %d] [GE] UNSAT", this->getId());
+        LOG2("[PRS %d] [GE] UNSAT", this->getPreId());
     }
     xors.clear();
     scc_id.clear();

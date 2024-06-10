@@ -34,7 +34,7 @@ void *mainThrSharing(void *arg)
 {
    Sharer *shr = (Sharer *)arg;
 
-   int round = 0;
+   shr->round = 0;
    int nbStrats = shr->sharingStrategies.size();
    int lastStrategy = -1;
    int sleepTime = shr->sharingStrategies.front()->getSleepingTime() / nbStrats; // TODO : to be replaced
@@ -44,21 +44,21 @@ void *mainThrSharing(void *arg)
    timespec timespecCond;
 
    getTimeSpecMicro(sleepTime, &sleepTimeSpec);
-   usleep(Parameters::getIntParam("init-sleep", 10000)*shr->id); /* attempt to desync when there are multiple sharers */
-   LOG1("Sharer %d will start now", shr->id);
+   usleep(Parameters::getIntParam("init-sleep", 10000)*shr->getId()); /* attempt to desync when there are multiple sharers */
+   LOG1("Sharer %d will start now", shr->getId());
 
    bool can_break = false;
 
    while (!can_break)
    {
 
-      lastStrategy = round % nbStrats;
+      lastStrategy = shr->round % nbStrats;
 
       // Sharing phase
       sharingTime = getAbsoluteTime();
       can_break = shr->sharingStrategies[lastStrategy]->doSharing();
       sharingTime = getAbsoluteTime() - sharingTime;
-      LOG2("[Sharer %d] Sharing round %d done in %f s.", shr->id, round, sharingTime);
+      LOG2("[Sharer %d] Sharing round %d done in %f s.", shr->getId(), shr->round, sharingTime);
 
       // sleep
       if (!globalEnding)
@@ -73,22 +73,22 @@ void *mainThrSharing(void *arg)
          // usleep(sleepTime);
       }
 
-      round++; // New round
+      shr->round++; // New round
       shr->totalSharingTime += sharingTime;
    }
 
    // Removed strategy that ended
-   LOG3("Sharer %d strategy %d ended", shr->id, lastStrategy);
+   LOG3("Sharer %d strategy %d ended", shr->getId(), lastStrategy);
    nbStrats--;
 
-   LOG3("Sharer %d has %d remaining strategies.", shr->id, nbStrats);
+   LOG3("Sharer %d has %d remaining strategies.", shr->getId(), nbStrats);
 
    // Launch a final doSharing to make the other strategies finalize correctly (removed from the previous while(1) to lessen ifs)
    for (int i = 0; i < nbStrats; i++)
    {
       if (i == lastStrategy)
          continue;
-      LOG3("Sharer %d will end strategy %d", shr->id, i);
+      LOG3("Sharer %d will end strategy %d", shr->getId(), i);
       if (!shr->sharingStrategies[i]->doSharing())
       {
          LOGERROR("Panic, strategy %d didn't detect ending!", i);
@@ -97,12 +97,12 @@ void *mainThrSharing(void *arg)
    return NULL;
 }
 
-Sharer::Sharer(int _id, std::vector<std::shared_ptr<SharingStrategy>> &_sharingStrategies) : Entity(_id), sharingStrategies(_sharingStrategies)
+Sharer::Sharer(int _id, std::vector<std::shared_ptr<SharingStrategy>> &_sharingStrategies) : m_sharerId(_id), sharingStrategies(_sharingStrategies)
 {
    sharer = new Thread(mainThrSharing, this);
 }
 
-Sharer::Sharer(int _id, std::shared_ptr<SharingStrategy> _sharingStrategy) : Entity(_id)
+Sharer::Sharer(int _id, std::shared_ptr<SharingStrategy> _sharingStrategy) : m_sharerId(_id)
 {
    sharingStrategies.push_back(_sharingStrategy);
    sharer = new Thread(mainThrSharing, this);
@@ -115,7 +115,7 @@ Sharer::~Sharer()
 
 void Sharer::printStats()
 {
-   LOGSTAT("Sharer %d: executionTime: %f", this->getId(), this->totalSharingTime);
+   LOGSTAT("Sharer %d: executionTime: %f, rounds: %d, average: %f", this->getId(), this->totalSharingTime, this->round, this->totalSharingTime/this->round);
    for (int i = 0; i < sharingStrategies.size(); i++)
    {
       LOGSTAT("Strategy '%s': ", typeid(*sharingStrategies[i]).name());

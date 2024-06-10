@@ -25,7 +25,6 @@
 #include <Eigen/SparseCore>
 
 #include "utils/SatUtils.h"
-#include "Entity.hpp"
 #include "preprocessors/PreprocessInterface.h"
 
 //===============litQueue.h====================
@@ -81,7 +80,7 @@ struct PairCompare
 #define MATRIX_IDX_TO_VAR(IDX) (IDX + 1)
 
 /// Tie-Breaking Heuristics
-enum SBVATieBreak
+enum class SBVATieBreak
 {
     NONE = 1,
     THREEHOPS = 2,
@@ -100,7 +99,7 @@ struct ProofClause
 /// \ingroup solving
 
 /// @brief SBVA preprocessing, it is the original implementation of https://github.com/hgarrereyn/SBVA that was reorganized
-class StructuredBVA : public PreprocessInterface, public Entity
+class StructuredBVA : public PreprocessInterface
 {
 public:
     /// Constructor.
@@ -110,8 +109,6 @@ public:
     ~StructuredBVA();
 
     unsigned getVariablesCount();
-
-    unsigned getDivisionVariable();
 
     void setInterrupt();
 
@@ -266,8 +263,6 @@ private:
 
     // Stats
     //------
-    //  TODO make a stats structure if more stats are tracked
-
     unsigned varCount;
 
     unsigned adjacencyDeleted;

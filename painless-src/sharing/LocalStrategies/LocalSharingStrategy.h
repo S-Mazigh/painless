@@ -1,13 +1,11 @@
 #pragma once
 
-#include "sharing/SharingStrategy.h"
 #include "sharing/SharingStatistics.h"
 #include "sharing/SharingEntityVisitor.h"
 
-// To include the real types
-#include "solvers/SolverCdclInterface.hpp"
-#include "sharing/GlobalDatabase.h"
-#include "sharing/SharingEntity.hpp"
+/* Must be after SharingEntityVisitor because of the forward declaration */
+#include "sharing/SharingStrategy.h"
+
 
 #include "utils/Threading.h"
 
@@ -58,6 +56,7 @@ protected:
     /// Mutex used to add producers and consumers.
     Mutex removeLock;
 
+    /// Atomics to reduce impact of mutex locks
     std::atomic<bool> mustAddEntities = false;
     std::atomic<bool> mustRemoveEntities = false;
 

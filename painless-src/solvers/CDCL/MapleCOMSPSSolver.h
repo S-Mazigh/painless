@@ -20,8 +20,9 @@
 #pragma once
 
 #include "clauses/ClauseBuffer.h"
-#include "solvers/SolverCdclInterface.hpp"
 #include "utils/Threading.h"
+
+#include "SolverCdclInterface.hpp"
 
 #define MAPLECOMSPS_
 
@@ -153,4 +154,7 @@ protected:
    friend MapleCOMSPS::Lit cbkMapleCOMSPSImportUnit(void *);
    friend bool cbkMapleCOMSPSImportClause(void *, unsigned *, MapleCOMSPS::vec<MapleCOMSPS::Lit> &);
    friend void cbkMapleCOMSPSExportClause(void *, unsigned, MapleCOMSPS::vec<MapleCOMSPS::Lit> &);
+
+public:
+   static std::atomic<unsigned> mapleCount;
 };

@@ -50,7 +50,7 @@ void StructuredBVA::run()
 {
     if (!this->initialized)
     {
-        LOGWARN("SBVA %d wasn't initialized correctly, cannot run, returning", this->getId());
+        LOGWARN("SBVA %d wasn't initialized correctly, cannot run, returning", this->getPreId());
         return;
     }
     /* A priority queue is instantiated to keep track of all the literals in pairs (num_clauses_occuring, lit) using a certain order */
@@ -100,7 +100,7 @@ void StructuredBVA::run()
         /* Check if to stop */
         if (this->stopPreprocessing || globalEnding || (this->maxReplacements > 0 && this->replacementsCount >= this->maxReplacements))
         {
-            LOG("SBVA %d is ending: stopPreprocessing %d, globalEnding %d, maxReplacement %u, replacementCount %u", this->getId(), this->stopPreprocessing.load(), globalEnding.load(), this->maxReplacements, this->replacementsCount);
+            LOG("SBVA %d is ending: stopPreprocessing %d, globalEnding %d, maxReplacement %u, replacementCount %u", this->getPreId(), this->stopPreprocessing.load(), globalEnding.load(), this->maxReplacements, this->replacementsCount);
             return;
         }
 

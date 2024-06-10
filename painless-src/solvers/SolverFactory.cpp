@@ -20,28 +20,36 @@
 #include "utils/Parameters.h"
 #include "utils/System.h"
 #include "utils/Logger.h"
+#include "utils/ErrorCodes.h"
+#include "utils/MpiUtils.h"
 #include "painless.h"
+
+#include "solvers/CDCL/KissatMABSolver.h"
+#include "solvers/CDCL/KissatGASPISolver.h"
+#include "solvers/CDCL/MapleCOMSPSSolver.h"
+#include "solvers/LocalSearch/YalSatSolver.h"
 
 #include <cassert>
 #include <random>
+#include <map>
 
-void SolverFactory::diversification(const std::vector<std::shared_ptr<SolverCdclInterface>> &cdclSolvers, const std::vector<std::shared_ptr<LocalSearchSolver>> &localSolvers, bool dist, int mpi_rank, int world_size)
+std::atomic<int> SolverFactory::currentIdSolver(0);
+
+void SolverFactory::diversification(const std::vector<std::shared_ptr<SolverCdclInterface>> &cdclSolvers, const std::vector<std::shared_ptr<LocalSearchInterface>> &localSolvers)
 {
+   if (dist)
+   {
+      if (mpi_rank < 0)
+      {
+         LOGERROR("MPI was not initialized");
+         exit(PERR_MPI);
+      }
+   }
    /* More flexibile diversification */
    unsigned nb_solvers = cdclSolvers.size(); // cdclSolvers.size() + localSolvers.size();
    unsigned maxId = (dist) ? nb_solvers * world_size : nb_solvers;
 
-   /* TODO: solvers must init this by themselves in the constructor*/
-   if (dist)
-   {
-      for (auto &solver : cdclSolvers)
-      {
-         assert(mpi_rank >= 0);
-         solver->setId(nb_solvers * mpi_rank + solver->id);
-      }
-   }
-
-   if (maxId <= 2)
+      if (maxId <= 2)
    {
       LOGWARN("Not enough solvers (%d) to perform a good diversification (need >= 2)", maxId);
    }
@@ -50,17 +58,11 @@ void SolverFactory::diversification(const std::vector<std::shared_ptr<SolverCdcl
    std::mt19937 engine(std::random_device{}());
    std::uniform_int_distribution<int> uniform(1, Parameters::getIntParam("max-div-noise", 100)); /* test with a normal dist*/
 
-   SolverDivFamily family = SolverDivFamily::MIXED_SWITCH;
-
-   LOGDEBUG1("Diversification on: nb_solvers = %d, dist = %d, mpi_rank = %d, world_size = %d, maxId = %d", nb_solvers, dist, mpi_rank, world_size, maxId);
+   LOGDEBUG1("Diversification on: nb_solvers = %d, dist = %d, mpi_rank = %d, world_size = %d, maxId = %d", nb_solvers, dist.load(), mpi_rank, world_size, maxId);
 
    for (auto cdclSolver : cdclSolvers)
    {
-      /* TODO: Use mpi_rank if dist and certain Global Strat*/
-      /* % maxId is useful when new solvers are added afterwards */
-      family = ((cdclSolver->id % maxId) < maxId / 3) ? SolverDivFamily::UNSAT_FOCUSED : ((cdclSolver->id % maxId) < maxId * 2 / 3) ? SolverDivFamily::SAT_STABLE
-                                                                                                                                    : SolverDivFamily::MIXED_SWITCH;
-      cdclSolver->setFamily(family);
+
       cdclSolver->diversify(engine, uniform);
       // solver->printParameters();
    }
@@ -73,66 +75,97 @@ void SolverFactory::diversification(const std::vector<std::shared_ptr<SolverCdcl
    LOG("Diversification done");
 }
 
-void SolverFactory::createSolver(char type, std::vector<std::shared_ptr<SolverCdclInterface>> &cdclSolvers, std::vector<std::shared_ptr<LocalSearchSolver>> &localSolvers)
+SolverAlgorithmType SolverFactory::createSolver(char type, std::shared_ptr<SolverInterface> &createdSolver)
 {
    int id = currentIdSolver.fetch_add(1);
-   if(id >= cpus)
+   LOGDEBUG1("Creating Solver %d", id);
+   if (id >= cpus)
    {
       LOGWARN("Solver of type '%c' will not be instantiated, the number of solvers %d reached the maximum %d.", type, id, cpus);
-      return;
+      return SolverAlgorithmType::UNKNOWN;
+   }
+   if (dist)
+   {
+      id = cpus * mpi_rank + id;
    }
    switch (type)
    {
 #ifdef GLUCOSE_
    case 'g':
       // GLUCOSE implementation
-      break;
+      return SolverAlgorithmType::CDCL;
+      // break;
 #endif
 
 #ifdef LINGELING_
    case 'l':
       // LINGELING implementation
-      break;
+      return SolverAlgorithmType::CDCL;
+      // break;
 #endif
 
 #ifdef MAPLECOMSPS_
-   case 'a':
-      cdclSolvers.emplace_back(std::make_shared<MapleCOMSPSSolver>(id));
-      break;
+   case 'M':
+      createdSolver = std::make_shared<MapleCOMSPSSolver>(id, MapleCOMSPSSolver::mapleCount);
+      MapleCOMSPSSolver::mapleCount++;
+
+      return SolverAlgorithmType::CDCL;
+      // break;
 #endif
 
 #ifdef MINISAT_
    case 'm':
       // MINISAT implementation
-      break;
+      return SolverAlgorithmType::CDCL;
+      // break;
 #endif
 
 #ifdef KISSATMAB_
    case 'k':
-      cdclSolvers.emplace_back(std::make_shared<KissatMABSolver>(id));
-      break;
+      createdSolver = std::make_shared<KissatMABSolver>(id);
+      return SolverAlgorithmType::CDCL;
+      // break;
 #endif
 
 #ifdef KISSATGASPI_
    case 'K':
-      cdclSolvers.emplace_back(std::make_shared<KissatGASPISolver>(id));
-      break;
+      createdSolver = std::make_shared<KissatGASPISolver>(id);
+      return SolverAlgorithmType::CDCL;
+      // break;
 #endif
 
 #ifdef YALSAT_
    case 'y':
-      localSolvers.emplace_back(std::make_shared<YalSat>(id));
-      break;
+      createdSolver = std::make_shared<YalSat>(id);
+      return SolverAlgorithmType::LOCAL_SEARCH;
+      // break;
 #endif
 
    default:
       LOGERROR("The SolverCdclType %d specified is not available!", type);
-      exit(-1);
-      break;
+      exit(PERR_UNKNOWN_SOLVER);
    }
 }
 
-void SolverFactory::createSolvers(int maxSolvers, std::string portfolio, std::vector<std::shared_ptr<SolverCdclInterface>> &cdclSolvers, std::vector<std::shared_ptr<LocalSearchSolver>> &localSolvers)
+SolverAlgorithmType SolverFactory::createSolver(char type, std::vector<std::shared_ptr<SolverCdclInterface>> &cdclSolvers, std::vector<std::shared_ptr<LocalSearchInterface>> &localSolvers)
+{
+   std::shared_ptr<SolverInterface> createdSolver;
+   switch (createSolver(type, createdSolver))
+   {
+   case SolverAlgorithmType::CDCL:
+      cdclSolvers.push_back(std::static_pointer_cast<SolverCdclInterface>(createdSolver));
+      return SolverAlgorithmType::CDCL;
+
+   case SolverAlgorithmType::LOCAL_SEARCH:
+      localSolvers.push_back(std::static_pointer_cast<LocalSearchInterface>(createdSolver));
+      return SolverAlgorithmType::LOCAL_SEARCH;
+
+   default: /* Unknown type case is dealed in base function */
+      return SolverAlgorithmType::UNKNOWN;
+   }
+}
+
+void SolverFactory::createSolvers(int maxSolvers, std::string portfolio, std::vector<std::shared_ptr<SolverCdclInterface>> &cdclSolvers, std::vector<std::shared_ptr<LocalSearchInterface>> &localSolvers)
 {
    unsigned typeCount = portfolio.size();
    for (size_t i = 0; i < maxSolvers; i++)
@@ -141,17 +174,130 @@ void SolverFactory::createSolvers(int maxSolvers, std::string portfolio, std::ve
    }
 }
 
-Reducer *
-SolverFactory::createReducerSolver()
+void SolverFactory::createInitSolvers(int count, std::string portfolio, std::vector<std::shared_ptr<SolverCdclInterface>> &cdclSolvers, std::vector<std::shared_ptr<LocalSearchInterface>> &localSolvers, std::vector<simpleClause> &initClauses, unsigned varCount)
 {
-   int id = currentIdSolver.fetch_add(1);
+   // Create a map of char to unsigned for count per solver type
+   std::map<char, unsigned> countPerSolver;
+   std::vector<std::thread> clauseLoaders;
+   unsigned portfolioSize = portfolio.size();
 
-   Reducer *solver = new Reducer(id, SolverCdclType::MAPLE);
+   std::mt19937 engine(std::random_device{}());
+   std::uniform_int_distribution<int> uniform(1, Parameters::getIntParam("max-div-noise", 100));
 
-   return solver;
+   if (!portfolioSize)
+   {
+      LOGERROR("Empty portfolio string");
+      exit(PERR_ARGS_ERROR);
+   }
+   else if (count < portfolioSize)
+   {
+      LOGERROR("Specified portfolio requires at least %d threads (-c=%d)", portfolioSize, cpus);
+      exit(PERR_ARGS_ERROR);
+   }
+
+   unsigned remainder = count % portfolioSize;
+
+   std::pair<std::map<char, unsigned int>::iterator, bool> retPair;
+   for (char &solverType : portfolio)
+   {
+      retPair = countPerSolver.insert({solverType, count / portfolioSize});
+      if (!retPair.second)
+         countPerSolver.at(solverType) += count / portfolioSize;
+   }
+
+   for (unsigned i = 0; i < remainder; i++)
+      countPerSolver.at(portfolio.at(i % portfolioSize))++;
+
+   // Loop on portfolio string: 1- create one instance, 2- add initialClauses, 3- count number of possible instantiations
+   double initMem, finalMem, diffMem;
+   double availableMem, neededMem;
+   unsigned possibleCount;
+
+   neededMem = 0;
+   for (auto &pair : countPerSolver)
+   {
+      LOGDEBUG1("Initial Count of %c: %u", pair.first, countPerSolver.at(pair.first));
+
+      initMem = MemInfo::getUsedMemory();
+
+      switch (SolverFactory::createSolver(pair.first, cdclSolvers, localSolvers))
+      {
+      case SolverAlgorithmType::CDCL:
+         cdclSolvers.back()->diversify(engine, uniform);
+         cdclSolvers.back()->addInitialClauses(initClauses, varCount);
+         break;
+
+      case SolverAlgorithmType::LOCAL_SEARCH:
+         localSolvers.back()->diversify(engine, uniform);
+         localSolvers.back()->addInitialClauses(initClauses, varCount);
+         break;
+
+      case SolverAlgorithmType::UNKNOWN:
+         LOG1("Max Id reached, factory returning");
+         goto end;
+
+      default:
+         LOGERROR("The solver algorithm type is not supported by the factory!");
+         exit(PERR_NOT_SUPPORTED);
+      }
+
+      finalMem = MemInfo::getUsedMemory();
+
+      diffMem = (finalMem - initMem) * 5 ; /* *5 just a guardrail for big instances */
+      // neededMem +=diffMem; /*getAvailableMemory() is aware*/
+
+      availableMem = MemInfo::getAvailableMemory() - neededMem;
+      possibleCount = availableMem / diffMem;
+
+      LOGDEBUG1("Solver type %c needs %f Ko of Memory. With %f Ko available memory, we can create %u other such solvers.", pair.first, diffMem, availableMem, possibleCount);
+
+      neededMem += diffMem * (pair.second - 1);
+
+      if (neededMem >= availableMem)
+      {
+         LOGWARN("Portfolio %s stopping at solver type %c (%u / %u)", portfolio.c_str(), pair.first, possibleCount + 1, pair.second);
+         pair.second = (possibleCount + 1);
+         break;
+      }
+   }
+
+   // Multi thread addinitClauses on the other solvers
+   for (auto &pair : countPerSolver)
+   {
+      LOG1("SolverType %c : %u", pair.first, pair.second);
+      for (unsigned i = pair.second; i > 1; i--) /* since first is init in previous loop */
+      {
+         LOGDEBUG1("%d : creating %c", i, pair.first);
+         switch (SolverFactory::createSolver(pair.first, cdclSolvers, localSolvers))
+         {
+         case SolverAlgorithmType::CDCL:
+            cdclSolvers.back()->diversify(engine, uniform);
+            clauseLoaders.emplace_back(&SolverCdclInterface::addInitialClauses, cdclSolvers.back(), std::ref(initClauses), varCount);
+            break;
+
+         case SolverAlgorithmType::LOCAL_SEARCH:
+            localSolvers.back()->diversify(engine, uniform);
+            clauseLoaders.emplace_back(&LocalSearchInterface::addInitialClauses, localSolvers.back(), std::ref(initClauses), varCount);
+            break;
+
+         case SolverAlgorithmType::UNKNOWN:
+            LOG1("Max Id reached, factory returning");
+            goto end;
+
+         default:
+            LOGERROR("An unsupported algorithm type was created !");
+            exit(PERR_NOT_SUPPORTED);
+         }
+      }
+   }
+
+end:
+   for (auto &thread : clauseLoaders)
+      thread.join();
+   LOG("All instanced solvers loaded the initial clauses");
 }
 
-void SolverFactory::printStats(const std::vector<std::shared_ptr<SolverCdclInterface>> &cdclSolvers, const std::vector<std::shared_ptr<LocalSearchSolver>> &localSolvers)
+void SolverFactory::printStats(const std::vector<std::shared_ptr<SolverCdclInterface>> &cdclSolvers, const std::vector<std::shared_ptr<LocalSearchInterface>> &localSolvers)
 {
    /*LOGSTAT(" | ID | conflicts  | propagations |  restarts  | decisions  "
        "| memPeak |");*/

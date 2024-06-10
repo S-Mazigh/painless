@@ -19,9 +19,7 @@
 
 #pragma once
 
-#include "sharing/Sharer.h"
-#include "solvers/SolverCdclInterface.hpp"
-#include "working/WorkingStrategy.h"
+#include "solvers/SolverInterface.hpp"
 
 #include <atomic>
 #include <vector>
@@ -29,29 +27,18 @@
 
 /// Is it the end of the search
 extern std::atomic<bool> globalEnding;
+
 /// @brief  Mutex for timeout cond
 extern pthread_mutex_t mutexGlobalEnd;
 
 /// @brief Cond to wait on timeout or wakeup on globalEnding
 extern pthread_cond_t condGlobalEnd;
 
-/// Working strategy
-extern WorkingStrategy *working;
-
-/// Array of sharers
-extern std::vector<Sharer *> sharers;
-
-/// Size of the array of sharers
-extern int nSharers;
-
 /// Final result
 extern SatResult finalResult;
 
 /// Model for SAT instances
 extern std::vector<int> finalModel;
-
-/// @brief Number of sharing groups
-extern int nb_groups;
 
 /// Number of solvers for sat solving to launch
 extern int cpus;

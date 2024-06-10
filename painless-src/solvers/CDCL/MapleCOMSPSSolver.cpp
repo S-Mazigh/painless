@@ -25,7 +25,8 @@
 #include "utils/Logger.h"
 #include "utils/System.h"
 #include "utils/Parameters.h"
-#include "solvers/MapleCOMSPSSolver.h"
+
+#include "solvers/CDCL/MapleCOMSPSSolver.h"
 
 using namespace MapleCOMSPS;
 
@@ -33,6 +34,8 @@ using namespace MapleCOMSPS;
 #define MINI_LIT(lit) lit > 0 ? mkLit(lit - 1, false) : mkLit((-lit) - 1, true)
 
 #define INT_LIT(lit) sign(lit) ? -(var(lit) + 1) : (var(lit) + 1)
+
+std::atomic<unsigned> MapleCOMSPSSolver::mapleCount(0);
 
 static void makeMiniVec(std::shared_ptr<ClauseExchange> cls, vec<Lit> &mcls)
 {
@@ -57,7 +60,7 @@ void cbkMapleCOMSPSExportClause(void *issuer, unsigned lbd, vec<Lit> &cls)
    }
 
    ncls->lbd = lbd;
-   ncls->from = mp->id;
+   ncls->from = mp->getSolverId();
 
    mp->clausesToExport.addClause(ncls);
 }
@@ -94,7 +97,7 @@ bool cbkMapleCOMSPSImportClause(void *issuer, unsigned *lbd, vec<Lit> &mcls)
    return true;
 }
 
-MapleCOMSPSSolver::MapleCOMSPSSolver(int id) : SolverCdclInterface(id, MAPLE)
+MapleCOMSPSSolver::MapleCOMSPSSolver(int id) : SolverCdclInterface(id, MapleCOMSPSSolver::mapleCount.fetch_add(1), SolverCdclType::MAPLE)
 {
    lbdLimit = 0;
 
@@ -106,7 +109,7 @@ MapleCOMSPSSolver::MapleCOMSPSSolver(int id) : SolverCdclInterface(id, MAPLE)
    solver->issuer = this;
 }
 
-MapleCOMSPSSolver::MapleCOMSPSSolver(const MapleCOMSPSSolver &other, int id) : SolverCdclInterface(id, MAPLE)
+MapleCOMSPSSolver::MapleCOMSPSSolver(const MapleCOMSPSSolver &other, int id) : SolverCdclInterface(id, MapleCOMSPSSolver::mapleCount.fetch_add(1), SolverCdclType::MAPLE)
 {
    lbdLimit = 0;
 
@@ -163,6 +166,8 @@ void MapleCOMSPSSolver::setSolverInterrupt()
    stopSolver = true;
 
    solver->interrupt();
+
+   LOG1("Asked MapleCOMSPS %d to terminate", this->getSolverId());
 }
 
 void MapleCOMSPSSolver::unsetSolverInterrupt()
@@ -175,7 +180,8 @@ void MapleCOMSPSSolver::unsetSolverInterrupt()
 // Diversify the solver
 void MapleCOMSPSSolver::diversify(std::mt19937 &rng_engine, std::uniform_int_distribution<int> &uniform_dist)
 {
-   if (id == ID_XOR)
+   /* TODO enhance this diversification  with uniform */
+   if (this->getSolverId() == ID_XOR)
    {
       solver->GE = true;
    }
@@ -184,7 +190,7 @@ void MapleCOMSPSSolver::diversify(std::mt19937 &rng_engine, std::uniform_int_dis
       solver->GE = false;
    }
 
-   if (id % 2)
+   if (this->getSolverId() % 2)
    {
       solver->VSIDS = false;
    }
@@ -193,7 +199,7 @@ void MapleCOMSPSSolver::diversify(std::mt19937 &rng_engine, std::uniform_int_dis
       solver->VSIDS = true;
    }
 
-   if (id % 4 >= 2)
+   if (this->getSolverId() % 4 >= 2)
    {
       solver->verso = false;
    }
@@ -223,7 +229,7 @@ MapleCOMSPSSolver::solve(const std::vector<int> &cube)
       if (solver->addClause(mcls) == false)
       {
          LOG(" unsat when adding cls");
-         return UNSAT;
+         return SatResult::UNSAT;
       }
    }
 
@@ -236,12 +242,12 @@ MapleCOMSPSSolver::solve(const std::vector<int> &cube)
    lbool res = solver->solveLimited(miniAssumptions);
 
    if (res == l_True)
-      return SAT;
+      return SatResult::SAT;
 
    if (res == l_False)
-      return UNSAT;
+      return SatResult::UNSAT;
 
-   return UNKNOWN;
+   return SatResult::UNKNOWN;
 }
 
 void MapleCOMSPSSolver::loadFormula(const char *filename)
@@ -303,7 +309,7 @@ void MapleCOMSPSSolver::addInitialClauses(const std::vector<simpleClause> &claus
       }
    }
 
-   LOG2("The Maple Solver %d loaded all the clauses", this->id);
+   LOG2("The Maple Solver %d loaded all the clauses", this->getSolverId());
 }
 
 void MapleCOMSPSSolver::importClauses(const std::vector<std::shared_ptr<ClauseExchange>> &clauses)
@@ -340,7 +346,7 @@ void MapleCOMSPSSolver::printStatistics()
    * Restars: %lu\n\t\
    * Decisions: %lu\n\t\
    * Maximum memory: %f Ko",
-           this->id, solver->conflicts, solver->propagations, solver->starts, solver->decisions, memUsedPeak());
+           this->getSolverId(), solver->conflicts, solver->propagations, solver->starts, solver->decisions, memUsedPeak());
 }
 
 std::vector<int>

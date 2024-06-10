@@ -135,7 +135,7 @@ bool preprocess::cnf2aig() {
         psign[abs(gate[i][0])] = psign[abs(gate[i][1])] = flag;
         // printf("%d = %d %d\n", gate[i].out, gate[i].in[0], gate[i].in[1]);
     }
-    LOGDEBUG1("[PRS %d] [Circuit] PI: ", this->getId());
+    LOGDEBUG1("[PRS %d] [Circuit] PI: ", this->getPreId());
     std::vector<int> is_input, andg;
     is_input.resize(vars + 1, 0);
     for (int i = 1; i <= vars; i++)
@@ -150,7 +150,7 @@ bool preprocess::cnf2aig() {
         else andg.push_back(v);
     }
     nxors /= 96;
-    LOGDEBUG1("[PRS %d] [Circuit] Real inputs: %d\nc xors: %d", this->getId(), rins, nxors);
+    LOGDEBUG1("[PRS %d] [Circuit] Real inputs: %d\nc xors: %d", this->getPreId(), rins, nxors);
     if (andg.size() == 0) return false;
     if (andg.size() >= 2) {
         int lastid = andg[0];
@@ -261,7 +261,7 @@ bool preprocess::do_epcec() {
         ull extra_values = 0;
 
         while(extra_values < (1LL << (extra_len)) ) {
-            if (extra_values % (1<<7) == 0) LOG2("[PRS %d] [Circuit] epcec round [%llu / %lld]", this->getId(), extra_values, (1LL << (extra_len)));
+            if (extra_values % (1<<7) == 0) LOG2("[PRS %d] [Circuit] epcec round [%llu / %lld]", this->getPreId(), extra_values, (1LL << (extra_len)));
             for(int i=0; i<ni; i++) {
                 int v = epcec_in[i]; 
                 result[v] = new Bitset;
@@ -356,7 +356,7 @@ int preprocess::preprocess_circuit() {
     epcec_preprocess();
     res = do_epcec();
     if (!res) {
-        LOG("[PRS %d][Circuit] epcec result: SAT", this->getId());
+        LOG("[PRS %d][Circuit] epcec result: SAT", this->getPreId());
         int *copy_model = new int[vars + 1];
 		for (int i = 1; i <= vars; i++) {
             copy_model[i] = model[i];

@@ -4,7 +4,13 @@ message Clause {
     repeated int32 literals = 1;
 }
 
+message ClausesChunk {
+    uint32 chunk_index = 1;
+    repeated Clause clauses = 2;
+}
+
 message Clauses {
     uint32 num_clauses = 1;
-    repeated Clause clauses = 2;
+    uint32 num_chunks = 2;
+    repeated ClausesChunk chunks = 3;
 }

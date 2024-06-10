@@ -10,6 +10,12 @@ void SharingStrategyFactory::instantiateLocalStrategies(int strategyNumber, std:
     allEntities.insert(allEntities.end(), cdclSolvers.begin(), cdclSolvers.end());
     allEntities.insert(allEntities.end(), globalDatabases.begin(), globalDatabases.end());
 
+    if(!allEntities.size())
+    {
+        LOGWARN("No SharingEntity, SharingStrategy %d will not be instantiated",strategyNumber);
+        return;
+    }
+
     if (strategyNumber == 0)
     {
         std::random_device dev;

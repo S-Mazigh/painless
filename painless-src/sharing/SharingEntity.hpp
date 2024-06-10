@@ -2,7 +2,7 @@
 
 #include "sharing/SharingEntityVisitor.h"
 #include "clauses/ClauseExchange.h"
-#include "../Entity.hpp"
+#include "utils/Logger.h"
 
 #include <vector>
 #include <memory>
@@ -10,10 +10,12 @@
 
 /// @brief A base class representing the entities that can exchange clauses via the local sharer(s)
 /// \ingroup sharing
-class SharingEntity : public Entity
+class SharingEntity
 {
 public:
-    SharingEntity(int _id) : Entity(_id) {}
+    SharingEntity() : m_sharingId(currentSharingId.fetch_add(1)) {
+        LOGDEBUG1("I am sharing entity %d", m_sharingId);
+    }
 
     virtual ~SharingEntity() {}
 
@@ -33,11 +35,19 @@ public:
     /**
      * @brief to set the lbdLimit on clauses to export
      * @param lbdValue the new lbdLimit value
-    */
+     */
     virtual void setLbdLimit(unsigned lbdValue)
     {
         this->lbdLimit = lbdValue;
     }
+
+    /// @brief Get the sharing id
+    /// @return the sharing id
+    int getSharingId() { return this->m_sharingId; }
+
+    /// @brief Set the sharing id
+    /// @param _id the new sharing id
+    void setSharingId(int _id) { this->m_sharingId = _id; }
 
     /// @brief The method used to call the SharingEntityVisitor's method
     /// @param v The SharingEntityVisitor that implements methods on this object
@@ -45,4 +55,9 @@ public:
 
     /// Lbd value the clauses mustn't exceed at export
     std::atomic<unsigned> lbdLimit;
+
+private:
+    int m_sharingId;
+
+    static std::atomic<int> currentSharingId;
 };

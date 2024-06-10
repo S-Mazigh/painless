@@ -30,6 +30,7 @@
 #include "working/SequentialWorker.h"
 #include "working/PortfolioPRS.h"
 #include "working/PortfolioSBVA.h"
+#include "working/PortfolioSimple.h"
 #include "preprocessors/StructuredBva.hpp"
 
 /* TEMP */
@@ -64,7 +65,7 @@ std::atomic<bool> dist = false;
 int nb_groups;
 int cpus;
 
-SatResult finalResult = UNKNOWN;
+SatResult finalResult = SatResult::UNKNOWN;
 
 std::vector<int> finalModel;
 
@@ -131,10 +132,15 @@ int main(int argc, char **argv)
    pthread_mutex_lock(&mutexGlobalEnd); // to make sure that the broadcast is done when main has done its wait
 
    // Init working
-   if (dist)
-      working = new PortfolioPRS();
-   else
-      working = new PortfolioSBVA();
+   // if (dist)
+   //    working = new PortfolioPRS();
+   // else
+   //    working = new PortfolioSBVA();
+
+   LOG("Main Memory : %f / %f", MemInfo::getUsedMemory(), MemInfo::getAvailableMemory());
+   MemInfo::deleteInstance();
+
+   working = new PortfolioSimple();
 
    // Launch working
    std::vector<int> cube;
@@ -172,7 +178,7 @@ int main(int argc, char **argv)
          if (!dist)
          {
             LOGSTAT("Resolution time: %f s", resolutionTime);
-            LOGSTAT("Memory used %f Ko", MemInfo::getUsedMemory());
+            LOGSTAT("Memory used %f Ko", MemInfo::getPickUsedMemory());
             logSolution("UNKNOWN");
             exit(0);
          }
@@ -201,7 +207,7 @@ int main(int argc, char **argv)
 
    if (dist)
    {
-      static_cast<PortfolioPRS *>(working)->restoreModelDist();
+      // static_cast<PortfolioPRS *>(working)->restoreModelDist();
       delete working;
       TESTRUNMPI(MPI_Finalize());
    }
@@ -228,8 +234,8 @@ int main(int argc, char **argv)
       }
 
       LOGSTAT("Resolution time: %f s", getRelativeTime());
-      LOGSTAT("Memory used %f Ko", MemInfo::getUsedMemory());
-      return finalResult;
+      LOGSTAT("Memory used %f Ko", MemInfo::getPickUsedMemory());
+      return static_cast<int>(finalResult);
    }
    return 0;
 }

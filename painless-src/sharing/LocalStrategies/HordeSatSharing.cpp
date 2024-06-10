@@ -105,13 +105,11 @@ bool HordeSatSharing::doSharing()
       LOGSTAT("[HordeAlt] [Update] Producers: %d, Consumers: %d, literalsPerRound: %d", producers.size(), consumers.size(), literalPerRound * producers.size());
    }
 
-   LOGDEBUG1("[Hordesat] start sharing");
-
    for (auto producer : producers)
    {
-      if (!this->databases.count(producer->id))
+      if (!this->databases.count(producer->getSharingId()))
       {
-         this->databases[producer->id] = new ClauseDatabaseVector();
+         this->databases[producer->getSharingId()] = new ClauseDatabaseVector();
       }
       unfiltered.clear();
       filtered.clear();
@@ -158,7 +156,7 @@ bool HordeSatSharing::doSharing()
       }
       for (auto cls : filtered)
       {
-         this->databases[producer->id]->addClause(cls);
+         this->databases[producer->getSharingId()]->addClause(cls);
          /* TODO separate units to a static attribute */
       }
       unfiltered.clear();
@@ -171,7 +169,7 @@ bool HordeSatSharing::doSharing()
 
       for (auto consumer : consumers)
       {
-         if (producer->id != consumer->id)
+         if (producer->getSharingId() != consumer->getSharingId())
          {
             consumer->importClauses(filtered); // if imported ref++
          }
@@ -188,21 +186,21 @@ bool HordeSatSharing::doSharing()
 
 void HordeSatSharing::visit(SolverCdclInterface *solver)
 {
-   LOG4("[HordeSat] Visiting the solver %d", solver->id);
+   LOG4("[HordeSat] Visiting the solver %d", solver->getSharingId());
    int used, usedPercent, selectCount;
 
-   used = this->databases[solver->id]->giveSelection(filtered, literalPerRound, &selectCount);
+   used = this->databases[solver->getSharingId()]->giveSelection(filtered, literalPerRound, &selectCount);
    usedPercent = (100 * used) / literalPerRound;
 
    if (usedPercent < 75)
    {
       solver->increaseClauseProduction();
-      LOG4("[HordeSat] production increase for solver %d.", solver->id);
+      LOG4("[HordeSat] production increase for solver %d.", solver->getSharingId());
    }
    else if (usedPercent > 98)
    {
       solver->decreaseClauseProduction();
-      LOG4("[HordeSat] production decrease for solver %d.", solver->id);
+      LOG4("[HordeSat] production decrease for solver %d.", solver->getSharingId());
    }
 
    if (selectCount > 0)
@@ -217,18 +215,18 @@ void HordeSatSharing::visit(SolverCdclInterface *solver)
 
 void HordeSatSharing::visit(SharingEntity *sh_entity)
 {
-   LOG4("[HordeSat] Visiting the sharing entity %d", sh_entity->id);
+   LOG4("[HordeSat] Visiting the sharing entity %d", sh_entity->getSharingId());
 
-   this->databases[sh_entity->id]->giveSelection(filtered, literalPerRound);
+   this->databases[sh_entity->getSharingId()]->giveSelection(filtered, literalPerRound);
 }
 
 #ifndef NDIST
 
 void HordeSatSharing::visit(GlobalDatabase *g_base)
 {
-   LOG4("[HordeSat] Visiting the global database %d", g_base->id);
+   LOG4("[HordeSat] Visiting the global database %d", g_base->getSharingId());
 
-   this->databases[g_base->id]->giveSelection(filtered, literalPerRound);
+   this->databases[g_base->getSharingId()]->giveSelection(filtered, literalPerRound);
 
    LOG2("[HordeSat] Added %d clauses imported from another process", filtered.size());
 }
