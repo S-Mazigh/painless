@@ -1,6 +1,6 @@
 #ifndef NDIST
 
-#include "MallobSharing.h"
+#include "TreeSharing.h"
 #include "utils/ClauseUtils.h"
 #include "utils/Parameters.h"
 #include "utils/MpiUtils.h"
@@ -10,7 +10,7 @@
 #include <algorithm>
 #include <random>
 
-MallobSharing::MallobSharing(std::shared_ptr<GlobalDatabase> g_base) : GlobalSharingStrategy(g_base)
+TreeSharing::TreeSharing(std::shared_ptr<GlobalDatabase> g_base) : GlobalSharingStrategy(g_base)
 {
     this->maxClauseSize = Parameters::getIntParam("max-cls-size", 30);
     this->totalSize = 0;
@@ -20,20 +20,20 @@ MallobSharing::MallobSharing(std::shared_ptr<GlobalDatabase> g_base) : GlobalSha
     // root_end = 0;
 }
 
-MallobSharing::~MallobSharing()
+TreeSharing::~TreeSharing()
 {
 }
 
-void MallobSharing::joinProcess(int winnerRank, SatResult res, const std::vector<int> &model)
+void TreeSharing::joinProcess(int winnerRank, SatResult res, const std::vector<int> &model)
 {
     this->GlobalSharingStrategy::joinProcess(winnerRank, res, model);
 }
 
-bool MallobSharing::initMpiVariables()
+bool TreeSharing::initMpiVariables()
 {
     if (world_size < 2)
     {
-        LOG("[Mallob] I am alone or MPI was not initialized, no need for distributed mode, initialization aborted");
+        LOG("[Tree] I am alone or MPI was not initialized, no need for distributed mode, initialization aborted");
         return false;
     }
     // [0]: parent, [1]: right, [2]: left. If it has one child it must be a right one
@@ -42,7 +42,7 @@ bool MallobSharing::initMpiVariables()
     nb_children = (right_child == MPI_UNDEFINED) ? 0 : (left_child == MPI_UNDEFINED) ? 1
                                                                                      : 2;
     father = (mpi_rank == 0) ? MPI_UNDEFINED : (mpi_rank - 1) / 2;
-    LOG2("[Mallob] parent:%d, left: %d, right: %d", father, left_child, right_child);
+    LOG2("[Tree] parent:%d, left: %d, right: %d", father, left_child, right_child);
 
     // the equation is described in mallob paper and the best value for alpha: https://doi.org/10.1007/978-3-030-80223-3_35
     // int nb_buffers_aggregated = countDescendants(world_size, mpi_rank);
@@ -51,7 +51,7 @@ bool MallobSharing::initMpiVariables()
 }
 
 // check if can be done with Recv_Init
-bool MallobSharing::doSharing()
+bool TreeSharing::doSharing()
 {
     MPI_Status status;
 
@@ -104,7 +104,7 @@ bool MallobSharing::doSharing()
         }
 
         this->totalSize = nb_buffers_aggregated * pow(0.875, log2(nb_buffers_aggregated)) * defaultSize;
-        LOGDEBUG1("[Mallob] TotalSize = %d(%d)", totalSize, nb_buffers_aggregated);
+        LOGDEBUG1("[Tree] TotalSize = %d(%d)", totalSize, nb_buffers_aggregated);
 
         clausesToSendSerialized.clear();
 
@@ -124,7 +124,7 @@ bool MallobSharing::doSharing()
     {
         clausesToSendSerialized.clear();
         this->totalSize = nb_buffers_aggregated * pow(0.875, log2(nb_buffers_aggregated)) * defaultSize;
-        LOGDEBUG1("[Mallob] TotalSize = %d(%d)", totalSize, nb_buffers_aggregated);
+        LOGDEBUG1("[Tree] TotalSize = %d(%d)", totalSize, nb_buffers_aggregated);
         
         //  I am a leaf so i will only send my clauses (no merge)
         gstats.sharedClauses += serializeClauses(clausesToSendSerialized);
@@ -174,7 +174,7 @@ bool MallobSharing::doSharing()
     // deserialize for all
     deserializeClauses(receivedClauses, &GlobalDatabase::addReceivedClause);
 
-    LOG2("[Mallob] received cls %u shared cls %d", this->gstats.receivedClauses, this->gstats.sharedClauses);
+    LOG2("[Tree] received cls %u shared cls %d", this->gstats.receivedClauses, this->gstats.sharedClauses);
     return false;
 }
 
@@ -183,7 +183,7 @@ bool MallobSharing::doSharing()
 //==============================
 
 // Pattern: this->idSharer 2 6 lbd 0 6 -9 3 5 lbd 0 -4 -2 lbd 0 nb_buffers_aggregated
-int MallobSharing::serializeClauses(std::vector<int> &serialized_v_cls)
+int TreeSharing::serializeClauses(std::vector<int> &serialized_v_cls)
 {
     int clausesSelected = 0;
     std::shared_ptr<ClauseExchange> tmp_cls;
@@ -197,7 +197,7 @@ int MallobSharing::serializeClauses(std::vector<int> &serialized_v_cls)
         // to not overflow the sending buffer: do not add if the clause size + lbd and the 0 will cause an overflow
         if (dataCount + tmp_cls->size + 2 > totalSize)
         {
-            LOGDEBUG1("Mallob] Serialization overflow avoided, %d/%d, wanted to add %d", dataCount, totalSize, tmp_cls->size + 2);
+            LOGDEBUG1("Tree] Serialization overflow avoided, %d/%d, wanted to add %d", dataCount, totalSize, tmp_cls->size + 2);
             globalDatabase->importClause(tmp_cls); // reinsert if doesn't fit
             break;
         }
@@ -228,7 +228,7 @@ int MallobSharing::serializeClauses(std::vector<int> &serialized_v_cls)
     return clausesSelected;
 }
 
-void MallobSharing::deserializeClauses(std::vector<int> &serialized_v_cls, bool (GlobalDatabase::*add)(std::shared_ptr<ClauseExchange> cls))
+void TreeSharing::deserializeClauses(std::vector<int> &serialized_v_cls, bool (GlobalDatabase::*add)(std::shared_ptr<ClauseExchange> cls))
 {
     std::vector<int> tmp_cls;
     int current_cls = 0;
@@ -268,7 +268,7 @@ void MallobSharing::deserializeClauses(std::vector<int> &serialized_v_cls, bool 
     }
 }
 
-int MallobSharing::mergeSerializedBuffersWithMine(std::vector<std::vector<int>> &buffers, std::vector<int> &result)
+int TreeSharing::mergeSerializedBuffersWithMine(std::vector<std::vector<int>> &buffers, std::vector<int> &result)
 {
     unsigned dataCount = 0;
     unsigned nb_clauses = 0;
@@ -296,7 +296,7 @@ int MallobSharing::mergeSerializedBuffersWithMine(std::vector<std::vector<int>> 
         {
             if (indexes[k] >= buffer_sizes[k]) // a buffer is all seen, erase its cell in all vectors
             {
-                LOGDEBUG1("Mallob] Buffer at %d will be removed since it is empty", k);
+                LOGDEBUG1("Tree] Buffer at %d will be removed since it is empty", k);
                 buffers.erase(buffers.begin() + k);
                 indexes.erase(indexes.begin() + k);
                 buffer_sizes.erase(buffer_sizes.begin() + k);

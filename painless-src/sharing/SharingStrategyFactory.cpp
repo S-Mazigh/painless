@@ -82,15 +82,15 @@ void SharingStrategyFactory::instantiateGlobalStrategies(int strategyNumber, con
         globalStrategies.emplace_back(new AllGatherSharing(globalDatabases[0]));
         break;
     case 2:
-        LOG("GSTRAT>> MallobSharing");
-        globalStrategies.emplace_back(new MallobSharing(globalDatabases[0]));
+        LOG("GSTRAT>> TreeSharing");
+        globalStrategies.emplace_back(new TreeSharing(globalDatabases[0]));
         break;
     case 3:
         LOG("GSTRAT>> RingSharing");
         globalStrategies.emplace_back(new RingSharing(globalDatabases[0]));
         break;
     default:
-        LOGWARN("GSTART>> Default GSTRAT selected: MallobSharing");
+        LOGWARN("GSTART>> Default GSTRAT selected: TreeSharing");
         break;
     }
 

@@ -4,15 +4,15 @@
 #include <vector>
 #include "GlobalSharingStrategy.h"
 
-/// @brief An inter mpi processes sharing strategy using a tree topology, inspired by the Mallob paper
+/// @brief An inter mpi processes sharing strategy using a tree topology, inspired by the Tree paper
 /// \ingroup global_sharing
-class MallobSharing : public GlobalSharingStrategy
+class TreeSharing : public GlobalSharingStrategy
 {
 public:
     /// @brief Constructor: If the -nb-bloom-gstrat is set to 1 then b_filters[0] is used for clausesToSend and receivedClauses. else no bloom
-    MallobSharing( std::shared_ptr<GlobalDatabase> g_base);
+    TreeSharing( std::shared_ptr<GlobalDatabase> g_base);
     /// Destructor
-    ~MallobSharing();
+    ~TreeSharing();
 
     /// @brief Post constructor initialization done after MPI_Init()
     bool initMpiVariables() override;

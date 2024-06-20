@@ -53,7 +53,7 @@ nb_nodes=3 # the number of mpi processes to launch
 timeout=1000 # the timeout before giving up (in seconds)
 strat=1 # 1 2 3 4 for strategies with Hordesat, 5 for Simple. 0 is the default. It is to randomize the strategy pick, can be useful with -dist.
 verbose=0 # for the logs (1 for general logs) (2 for detailed logs)
-gstrat=1 # 1 for AllGatherSharing, 2 for MallobSharing, and 3 for RingSharing
+gstrat=1 # 1 for AllGatherSharing, 2 for TreeSharing, and 3 for RingSharing
 filename=./inputs_example/f/f2000.cnf #path to a cnf file
 ```
 - Modes:

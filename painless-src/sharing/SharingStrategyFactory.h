@@ -8,7 +8,7 @@
 
 #ifndef NDIST
 #include "sharing/GlobalStrategies/AllGatherSharing.h"
-#include "sharing/GlobalStrategies/MallobSharing.h"
+#include "sharing/GlobalStrategies/TreeSharing.h"
 #include "sharing/GlobalStrategies/RingSharing.h"
 #endif
 
