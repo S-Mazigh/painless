@@ -1,5 +1,6 @@
-Painless: a Framework for Parallel SAT Solving 
+Painless: a Framework for Parallel SAT Solving MOVED TO <https://github.com/lip6/painless>
 ==============================================
+
 
 * Mazigh SAOUDI (mazigh.saoudi@epita.fr)
 
