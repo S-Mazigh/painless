@@ -18,6 +18,7 @@
 
 #include "painless.hpp"
 #include "utils/Logger.hpp"
+#include <climits>
 
 namespace saga {
 
