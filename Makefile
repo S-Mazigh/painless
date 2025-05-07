@@ -9,8 +9,28 @@ RELEASE_OUTPUT := $(PAINLESS_OUTPUT)_release
 CC := gcc
 CXX := g++
 COMMON_FLAGS := $(shell mpic++ --showme:compile) -fopenmp
-DEBUG_FLAGS := $(COMMON_FLAGS) -std=c++20 -g3 -O0 #-fsanitize=thread#-Wall -Wextra 
-RELEASE_FLAGS := $(COMMON_FLAGS) -std=c++20 -O3 -DNDEBUG
+
+# Check GCC version to determine proper C++ standard flag
+GCC_MAJOR := $(shell gcc -dumpversion)
+
+# Set appropriate C++20 flag based on GCC version
+ifeq ($(shell expr $(GCC_MAJOR) \< 8), 1)
+    $(error GCC version $(gcc --version) does not support C++20. Version 8 or higher required.)
+else ifeq ($(shell expr $(GCC_MAJOR) \< 10), 1)
+    # GCC 8 or 9 uses -std=c++2a
+    CPP_STD_FLAG := -std=c++2a
+else
+    # GCC 10+ uses -std=c++20
+    CPP_STD_FLAG := -std=c++20
+endif
+
+# Add standard flag to common flags
+COMMON_FLAGS += $(CPP_STD_FLAG)
+
+# Define debug and release flags 
+DEBUG_FLAGS := $(COMMON_FLAGS) -g3 -O0 #-fsanitize=thread#-Wall -Wextra
+RELEASE_FLAGS := $(COMMON_FLAGS) -O3 -DNDEBUG
+
 
 # Directories
 # ===========
