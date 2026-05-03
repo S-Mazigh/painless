@@ -147,8 +147,7 @@ parseClause(FILE* f, clause_t& cls)
       }
       cls.push_back(num);
     } else {
-      LOGERROR("Unexpected character, %c", c);
-      return false;
+      PABORT(PERR_PARSING,"Unexpected character, %c", c);
     }
   }
   return false;
