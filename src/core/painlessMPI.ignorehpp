@@ -1,0 +1,74 @@
+
+class PainlessImplMPI
+	// DIST
+	// ====
+	/// @brief Mpi rank of this process
+	mpirank_t m_mpiRank;
+
+	/// @brief The number of mpi processes launched
+	mpirank_t m_mpiWorldSize;
+
+	/// @brief Mpi rank of the winner
+	mpirank_t m_mpiWinner;
+
+
+	/// To check if painless is using distributed mode
+	std::atomic<bool> m_isDist;
+
+	bool requests_sent;							///< Flag indicating if requests to end were sent to the root
+	std::vector<MPI_Request> recv_end_requests; ///< MPI requests for non-blocking receive of end signals
+	MPI_Request send_end_request;				///< MPI request for non-root Isend for final synchronization with root
+	std::vector<int> receivedFinalResultRoot;	///< Buffer for storing results received from other mpi processes
+
+	// Dist Getters & Setters
+	// ======================
+	int& mpiRank() { return m_mpiRank; }
+	int& mpiWorldSize() { return m_mpiWorldSize; }
+	int& mpiWinner() { return m_mpiWinner; }
+
+    	bool isDist() { return m_isDist; }
+	void setDist() { m_isDist = true; }
+	void resetDist() { m_isDist = false; }
+
+	// DIST Methods
+	// ============
+    
+
+	/// Initialize the different MPI variables
+	bool initializeMPI();
+
+	/// Check if the distributed solved has ended, and synchronize accordingly
+	bool isPainlessMPIEnd();
+
+	/// Synchronize when this process finished
+	bool joinMPIProcess(int winnerRank, SatAnswer res, const std::vector<int>& model);
+
+	/// @brief Sends a formula represented by clauses and variable count over MPI.
+	/// @param clauses The vector of Clauses representing the formula.
+	/// @param varCount The number of variables in the formula (pointer).
+	/// @param rootRank The mpi process rank broadcasting the formula.
+	/// @return Returns true if the formula was successfully received, false otherwise.
+	bool sendFormula(std::vector<clause_t>& clauses, unsigned int* varCount, int rootRank);
+
+	/// @brief Sends a formula represented by clauses and variable count over MPI.
+	/// @param clauses The vector of zero ending clauses representing the formula.
+	/// @param varCount The number of variables in the formula (pointer).
+	/// @param rootRank The mpi process rank broadcasting the formula.
+	/// @return Returns true if the formula was successfully received, false otherwise.
+	bool sendFormula(clause_t& clauses, unsigned int* clsCount, unsigned int* varCount, int rootRank);
+
+	/// @brief Serializes a vector of Clauses into a vector of integers.
+	/// @param clauses The vector of Clauses to be serialized.
+	/// @param serializedClauses The vector where the serialized clauses will be stored.
+	/// @return Returns true if the serialization was successful, false otherwise.
+	/// @todo A version with a function parameter for GlobalSharingStrategies
+	bool serializeClauses(const std::vector<clause_t>& clauses, std::vector<int>& serializedClauses);
+
+	/// @brief Deserializes a vector of characters into a vector of clause_t objects.
+	/// @param serializedClauses The vector of characters that represents the serialized  array.
+	/// @param clauses The vector where the deserialized clause_t objects will be stored.
+	/// @return Returns true if the deserialization was successful, false otherwise.
+	bool deserializeClauses(const std::vector<int>& serializedClauses, std::vector<clause_t>& clauses);
+
+	/// @brief The winner determined by the root will send the model if the answer was SATISFIABLE
+	void sendModelToRoot();
