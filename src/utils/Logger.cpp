@@ -73,13 +73,13 @@ Logger::logError(int verbosityLevel,
         SystemResourceMonitor::Timer::getProcessRelativeTimeMicro().count()) /
         MILLION);
 
-    printf("%s(%s) %s%s%s", FUNC_STYLE, issuer, RESET, color, ERROR_STYLE);
+    printf("%s(%s) %s%s%s", colorize(FUNC_STYLE), issuer, colorize(RESET), colorize(color), colorize(ERROR_STYLE));
 
     vprintf(fmt, args);
 
     va_end(args);
 
-    printf("%s\n", RESET);
+    printf("%s\n", colorize(RESET));
 
     fflush(stdout);
   }
@@ -107,7 +107,7 @@ Logger::log(int verbosityLevel, const char* color, const char* fmt...)
 
     va_end(args);
 
-    printf("%s\n", RESET);
+    printf("%s\n", colorize(RESET));
 
     fflush(stdout);
   }
@@ -138,7 +138,7 @@ Logger::logClause(int verbosityLevel,
 
     va_end(args);
 
-    printf("%s", RESET);
+    printf("%s", colorize(RESET));
 
     printf("\n");
 
