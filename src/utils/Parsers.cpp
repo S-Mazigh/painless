@@ -155,65 +155,6 @@ parseClause(FILE* f, clause_t& cls)
 }
 
 bool
-parseCNF(const char* filename,
-         Formula& parsedFormula,
-         const std::vector<std::unique_ptr<ClauseProcessor>>& processors)
-{
-  FILE* f = fopen(filename, "r");
-  if (f == NULL) {
-    LOGERROR("Couldn't open file: %s", filename);
-    return false;
-  }
-
-  unsigned int parsedClauseCount = 0, parsedVarCount = 0, filteredOutCount = 0;
-  if (!parseCNFParameters(f, parsedVarCount, parsedClauseCount)) {
-    fclose(f);
-    return false;
-  }
-
-  parsedFormula.setVarCount(parsedVarCount);
-
-  for (auto& processor : processors) {
-    if (!processor->initMembers(parsedVarCount, parsedClauseCount)) {
-      LOGERROR("Error at member initialization of processor %s",
-               typeid(*processor).name());
-      exit(PERR_PARSING);
-    }
-  }
-
-  clause_t cls;
-  while (parseClause(f, cls)) {
-    if (!cls.empty()) {
-      bool keepClause = true;
-      for (auto& processor : processors) {
-        if (!(keepClause = processor->operator()(cls))) {
-          filteredOutCount++;
-          break;
-        }
-      }
-      if (keepClause && !parsedFormula.push_clause(std::move(cls))) {
-        LOGD1("Parse stopping because of UNSAT");
-        fclose(f);
-        return false;
-      }
-    }
-  }
-
-  fclose(f);
-
-  assert(parsedClauseCount - filteredOutCount ==
-         parsedFormula.getAllClauseCount());
-  LOG0("Successfully parsed %u clauses (filtered out: %u) with %u variables in "
-       "%s.",
-       parsedClauseCount,
-       filteredOutCount,
-       parsedVarCount,
-       filename);
-
-  return true;
-}
-
-bool
 loadCNF(const char* filename,
         std::function<bool(int)> addLitCBK,
         const std::vector<std::unique_ptr<ClauseProcessor>>& processors)

@@ -8,9 +8,9 @@
 
 #include "../solvers/SolverInterface.hpp"
 #include "containers/ClauseUtils.hpp"
-#include "containers/Formula.hpp"
 #include "painless/solver.hpp"
 #include <algorithm>
+#include <unordered_set>
 #include <functional>
 
 /**
@@ -139,19 +139,6 @@ parseCNF(const char* filename,
          std::vector<lit_t>& literals,
          unsigned int* varCount,
          unsigned int* clsCount,
-         const std::vector<std::unique_ptr<ClauseProcessor>>& processors = {});
-
-/**
- * @brief Parse a CNF formula from a file into a Formula object.
- *
- * @param filename The path to the file to parse.
- * @param formula Formula object to store the parsed formula.
- * @param processors Vector of clause processors to apply during parsing.
- * @return true if parsing was successful, false otherwise.
- */
-bool
-parseCNF(const char* filename,
-         Formula& formula,
          const std::vector<std::unique_ptr<ClauseProcessor>>& processors = {});
 
 /**
